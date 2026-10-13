@@ -480,6 +480,7 @@ async function entrarAprendiz(){
   if(ok==='bloqueado'){msg.textContent='Demasiados intentos fallidos. Espera 15 minutos o pide ayuda a tu instructor.';return}
   if(ok==='pendiente'){msg.textContent='Tu PIN está pendiente: tu instructor debe aprobar tu acceso. Vuelve a intentar más tarde.';return}
   if(ok==='sin_pin'){msg.textContent='Aún no has creado tu PIN. Pulsa «¿Primera vez? Crea tu PIN».';return}
+  if(ok==='novedad'){msg.textContent='Tu estado actual no permite el ingreso a la plataforma. Consulta con tu instructor.';return}
   if(ok!==true){msg.textContent='Los datos no coinciden. Revisa tu documento, tu ficha y tu PIN, o consulta con tu instructor.';return}
   SES={rol:'aprendiz',id:d,ficha:f};ssSet({d,f,p});iniciarApp();
 }
@@ -516,7 +517,8 @@ async function registrarAprendiz(){
   const M={no:'No encontramos ese documento en esa ficha. Revísalos o consulta con tu instructor.',
     ya_tiene:'Ya tienes un PIN creado. Entra normalmente; si lo olvidaste, pide a tu instructor que lo restablezca.',
     pin_invalido:'El PIN debe tener exactamente 4 números.',
-    pin_debil:'Elige un PIN menos obvio (evita 1234, 0000 o números repetidos).'};
+    pin_debil:'Elige un PIN menos obvio (evita 1234, 0000 o números repetidos).',
+    novedad:'Tu estado actual no permite el ingreso a la plataforma. Consulta con tu instructor.'};
   msg.textContent=M[r]||'No se pudo crear el PIN. Intenta de nuevo.';
 }
 async function salir(){
@@ -616,7 +618,8 @@ function parseJuicio(buf){
   };
 }
 function totalRes(est){return est.reduce((n,c)=>n+c.rs.length,0)}
-const inactivo=a=>['cancelado','retirado'].includes(norm(a.estado));
+/* Solo los aprendices EN FORMACIÓN cuentan: asistencia, evidencias, juicios, accesos y totales. Cualquier otra novedad queda fuera. */
+const inactivo=a=>norm(a.estado)!=='en formacion';
 function claseEstado(a){const n=norm(a.estado);if(n==='en formacion')return 'ok';if(n==='cancelado'||n==='retirado')return 'bad';return 'pend'}
 function mostrarPrevia(){
   const p=pendiente,ex=DB.fichas[p.numero];
@@ -631,7 +634,7 @@ function mostrarPrevia(){
     <p class="muted" style="margin:2px 0 10px">${esc(p.nombre)}</p>
     <div class="kpis" style="margin:8px 0">
       <div class="kpi"><b>${act}</b><span>aprendices activos</span></div>
-      <div class="kpi"><b>${can}</b><span>cancelados o retirados</span></div>
+      <div class="kpi"><b>${can}</b><span>con novedad (no cuentan)</span></div>
       <div class="kpi"><b>${totalRes(p.estructura)}</b><span>resultados de aprendizaje</span></div>
       <div class="kpi"><b>${tot?Math.round(ap*100/tot):0}%</b><span>aprobado en la ficha</span></div>
     </div>
@@ -785,12 +788,13 @@ function renderJuicios(){
   if(!SES||SES.rol!=='instructor')return;
   const f=fichaAct(),el=$('bodyJuicios');
   if(!f){el.innerHTML='<div class="empty">Sube un juicio evaluativo para ver el avance de tus aprendices.</div>';return}
-  const filas=f.aprendices.slice().sort((a,b)=>(a.apellidos+a.nombre).localeCompare(b.apellidos+b.nombre,'es')).map(a=>{
+  const conNov=f.aprendices.filter(a=>inactivo(a)).length;
+  const filas=f.aprendices.filter(a=>!inactivo(a)).sort((a,b)=>(a.apellidos+a.nombre).localeCompare(b.apellidos+b.nombre,'es')).map(a=>{
     const s=statsAp(f,a.doc);
     return `<tr><td><b>${esc(a.apellidos)}</b> ${esc(a.nombre)}<div class="muted">${esc(a.tipo)} ${esc(a.doc)}${claseEstado(a)!=='ok'?' <span class="pill '+claseEstado(a)+'">'+esc(a.estado)+'</span>':''}</div></td>
       <td style="min-width:140px"><div class="bar"><i style="width:${s.pct}%"></i></div><div class="muted" style="margin-top:3px">${s.ap}/${s.tot} · ${s.pct}%</div></td>
       <td><button class="mini ghost" data-d="${esc(a.doc)}" onclick="verDetalle(this.dataset.d)">Ver detalle</button></td></tr>`}).join('');
-  el.innerHTML=`<div class="tblwrap"><table class="tbl"><thead><tr><th>Aprendiz</th><th>Avance</th><th></th></tr></thead><tbody>${filas}</tbody></table></div>`;
+  el.innerHTML=(conNov?`<p class="muted" style="margin-bottom:8px">Se muestran solo los aprendices EN FORMACIÓN. ${conNov} con novedad no aparecen (los ves en la pestaña Aprendices).</p>`:'')+`<div class="tblwrap"><table class="tbl"><thead><tr><th>Aprendiz</th><th>Avance</th><th></th></tr></thead><tbody>${filas||'<tr><td colspan=3 class=muted>No hay aprendices EN FORMACIÓN.</td></tr>'}</tbody></table></div>`;
 }
 function renderLista(){
   if(!SES||SES.rol!=='instructor')return;
@@ -811,9 +815,9 @@ function renderLista(){
     const ina=inactivo(a);
     const acc=ina?'—':a.acceso==='aprobado'?'<span class="pill ok">Con PIN</span>':a.acceso==='pendiente'?'<span class="pill pend">Por aprobar</span>':'<span class="pill gris">Sin PIN</span>';
     const btn=(!ina&&a.acceso!=='sin_pin')?`<button class="mini ghost" data-d="${esc(a.doc)}" onclick="restablecerPin(this.dataset.d)">Restablecer PIN</button>`:'';
-    return `<tr><td>${i+1}</td><td>${esc(a.tipo)}</td><td>${esc(a.doc)}</td><td>${esc(a.apellidos)} ${esc(a.nombre)}</td>
+    return `<tr${ina?' style="opacity:.7"':''}><td>${i+1}</td><td>${esc(a.tipo)}</td><td>${esc(a.doc)}</td><td>${esc(a.apellidos)} ${esc(a.nombre)}</td>
     <td><span class="pill ${claseEstado(a)}">${esc(a.estado)}</span></td><td>${acc}</td><td>${btn}</td></tr>`}).join('');
-  el.innerHTML=`<p class="muted" style="margin-bottom:8px"><span class="pdot verde"></span>En formación &nbsp; <span class="pdot amarillo"></span>Con novedad &nbsp; <span class="pdot rojo"></span>Cancelado o retirado</p><div class="tblwrap"><table class="tbl"><thead><tr><th>#</th><th>Tipo</th><th>Documento</th><th>Nombre</th><th>Estado</th><th>Acceso</th><th></th></tr></thead><tbody>${filas}</tbody></table></div>`;
+  el.innerHTML=`<p class="muted" style="margin-bottom:8px"><span class="pdot verde"></span>En formación &nbsp; <span class="pdot amarillo"></span>Con novedad &nbsp; <span class="pdot rojo"></span>Cancelado o retirado<br>Solo los aprendices EN FORMACIÓN cuentan, aparecen en las demás pestañas y pueden entrar a la plataforma.</p><div class="tblwrap"><table class="tbl"><thead><tr><th>#</th><th>Tipo</th><th>Documento</th><th>Nombre</th><th>Estado</th><th>Acceso</th><th></th></tr></thead><tbody>${filas}</tbody></table></div>`;
 }
 /* ---- Accesos de los aprendices (PIN creado por ellos, aprobado por el instructor) ---- */
 async function refrescarSolicitudes(avisar){
@@ -1569,7 +1573,7 @@ let evKey='',evFiltroSec='';
 const BLOQ_EXT=/\.(exe|bat|cmd|com|scr|msi|js|jar|vbs|apk|ps1|sh|dll)$/i;
 const MAX_EVIDENCIA=15*1024*1024;
 const MSG_EV={bloqueado:'Demasiados intentos fallidos. Espera 15 minutos.',no:'Tu PIN no es válido. Sal y vuelve a entrar.',pendiente:'Tu acceso aún no está aprobado.',sin_pin:'Aún no tienes PIN.',
-  sin_carpeta:'Tu instructor todavía no configuró la carpeta de Drive.',seccion_invalida:'Esa sección no existe.',seccion_cerrada:'Esa sección ya está cerrada.',
+  sin_carpeta:'Tu instructor todavía no configuró la carpeta de Drive.',seccion_invalida:'Esa sección no existe.',seccion_cerrada:'Esa sección ya está cerrada. Pide a tu instructor que la reabra para poder cambiar tus archivos.',novedad:'Tu estado actual no permite esta acción. Consulta con tu instructor.',no_existe:'Esa evidencia ya no existe.',
   muy_grande:'El archivo es muy pesado (máximo 15 MB).',carpeta_no_accesible:'El script no puede entrar a la carpeta de Drive. Avisa a tu instructor.',datos_incompletos:'Faltan datos para subir la evidencia.'};
 
 function idCarpetaDrive(txt){
@@ -1616,7 +1620,8 @@ function renderEvidIns(){
 }
 function renderEvidRecibidas(f,act,secs){
   const opt='<option value="">Todas las secciones</option>'+secs.map(s=>`<option value="${esc(s.id)}" ${s.id===evFiltroSec?'selected':''}>${esc(s.nombre)}</option>`).join('');
-  let lista=f.evidencias.slice().sort((a,b)=>String(b.creado).localeCompare(String(a.creado)));
+  const activos=new Set(act.map(a=>a.doc));
+  let lista=f.evidencias.filter(e=>activos.has(e.doc)).sort((a,b)=>String(b.creado).localeCompare(String(a.creado)));
   if(evFiltroSec)lista=lista.filter(e=>e.seccion_id===evFiltroSec);
   let falta='';
   if(evFiltroSec){
@@ -1699,17 +1704,21 @@ function renderEvidAp(){
   const mias=f.evidencias.slice().sort((x,y)=>String(y.creado).localeCompare(String(x.creado)));
   let html=cab;
   if(!abiertas.length)html+='<div class="empty">Tu instructor todavía no ha abierto ninguna sección de trabajo.</div>';
-  else html+=`<p class="muted" style="margin-top:4px">Tu evidencia se guarda sola en tu carpeta <b>${esc((a.apellidos+' '+a.nombre).trim())}</b>, dentro de la sección que elijas.</p>
+  else html+=`<p class="muted" style="margin-top:4px">Tus archivos se guardan solos en tu carpeta <b>${esc((a.apellidos+' '+a.nombre).trim())}</b>, dentro de la sección que elijas.</p>
     <div class="label">Sección de trabajo</div>
     <select id="evSec" class="input" style="text-align:left"><option value="">Elige una sección</option>${abiertas.map(s=>`<option value="${esc(s.id)}">${esc(s.nombre)}${s.trimestre?' · '+esc(s.trimestre):''}</option>`).join('')}</select>
-    <div class="label">Nombre de la evidencia</div>
-    <input id="evNombre" class="input" style="text-align:left" maxlength="100" placeholder="Ej: Taller de torneado - punto 3">
-    <div class="label">Archivo (foto, PDF, documento... máximo 15 MB)</div>
-    <input type="file" id="evArchivo" class="input" style="text-align:left">
-    <button class="btn" id="btnSubirEv" onclick="subirEvidencia()">Subir evidencia</button>`;
+    <div class="label">Archivos (puedes elegir varios a la vez)</div>
+    <input type="file" id="evArchivo" class="input" style="text-align:left" multiple onchange="evElegir(this)">
+    <p class="hint" style="text-align:left">PDF, diseños de SolidWorks, programas de Mastercam o CIMCOEdit, fotos... Máximo 15 MB por archivo y 20 por vez. Puedes cambiar el nombre de cada evidencia antes de subirla.</p>
+    <div id="evCola" style="margin-top:8px"></div>
+    <button class="btn" id="btnSubirEv" onclick="subirEvidencias()" disabled>Subir evidencia</button>`;
   html+=`<h2 style="font-size:15px;margin:18px 0 8px">Lo que has entregado${mias.length?' ('+mias.length+')':''}</h2>`;
-  html+=mias.length?mias.map(e=>`<div class="res"><div class="t"><b>${esc(e.nombre)}</b><div class="muted">${esc(e.seccion_nombre)}</div></div><span class="pill ok">Entregada</span><div class="meta">${esc(fmtFechaHora(e.creado))}</div></div>`).join(''):'<div class="empty" style="padding:14px">Todavía no has subido evidencias.</div>';
+  html+=mias.length?mias.map(e=>{
+    const sec=f.secciones.find(x=>x.id===e.seccion_id),puede=!sec||sec.abierta;
+    const acc=puede?`<button class="mini danger" style="margin-left:6px" data-i="${esc(e.id)}" onclick="evEliminar(this.dataset.i)">Eliminar</button>`:' · <span>sección cerrada</span>';
+    return `<div class="res"><div class="t"><b>${esc(e.nombre)}</b><div class="muted">${esc(e.seccion_nombre)}</div></div><span class="pill ok">Entregada</span><div class="meta">${esc(fmtFechaHora(e.creado))}${acc}</div></div>`}).join(''):'<div class="empty" style="padding:14px">Todavía no has subido evidencias.</div>';
   el.innerHTML=html;
+  pintarCola();
 }
 async function prepararEvidencia(file){
   let blob=file,tipo=file.type||'application/octet-stream',nombre=file.name;
@@ -1727,27 +1736,112 @@ async function prepararEvidencia(file){
   if(blob.size>MAX_EVIDENCIA)throw new Error('El archivo pesa más de 15 MB. Comprímelo o sube uno más liviano.');
   return{tipo,archivo:nombre,datos:await leerB64(blob)};
 }
-async function subirEvidencia(){
+/* ---- Carga de varios archivos ---- */
+let evCola=[],evSubiendo=false,evSeq=0;
+const MAX_ARCHIVOS=20;
+const ERR_DEFINITIVOS=['bloqueado','no','pendiente','sin_pin','seccion_cerrada','sin_carpeta','seccion_invalida','carpeta_no_accesible'];
+function extDe(n){const m=String(n).match(/\.([A-Za-z0-9]{1,8})$/);return m?m[1].toLowerCase():''}
+function baseDe(n){return String(n).replace(/\.[A-Za-z0-9]{1,8}$/,'').trim()}
+function fmtTam(b){return b>=1048576?(b/1048576).toFixed(1)+' MB':Math.max(1,Math.round(b/1024))+' KB'}
+function evElegir(inp){
+  const files=Array.from(inp.files||[]);
+  let omitidos=0;
+  files.forEach(file=>{
+    if(evCola.some(x=>x.file.name===file.name&&x.file.size===file.size&&x.file.lastModified===file.lastModified))return;
+    if(evCola.length>=MAX_ARCHIVOS){omitidos++;return}
+    const it={id:++evSeq,file,nombre:baseDe(file.name)||'evidencia',ext:extDe(file.name),estado:'pendiente',msg:''};
+    if(BLOQ_EXT.test(file.name)){it.estado='rechazado';it.msg='Tipo de archivo no permitido'}
+    else if(file.size===0){it.estado='rechazado';it.msg='El archivo está vacío'}
+    else if(file.size>MAX_EVIDENCIA){it.estado='rechazado';it.msg='Pesa más de 15 MB: comprímelo en ZIP o súbelo por partes'}
+    evCola.push(it);
+  });
+  if(omitidos)toast('Máximo '+MAX_ARCHIVOS+' archivos por vez. Se omitieron '+omitidos+'.');
+  inp.value='';
+  pintarCola();
+}
+function evNombreCola(id,v){const it=evCola.find(x=>String(x.id)===String(id));if(it)it.nombre=v}
+function evQuitar(id){if(evSubiendo)return;evCola=evCola.filter(x=>String(x.id)!==String(id));pintarCola()}
+function pintarCola(){
+  const el=$('evCola');if(!el)return;
+  const n=evCola.filter(x=>x.estado==='pendiente'||x.estado==='error').length;
+  el.innerHTML=evCola.map(x=>{
+    const editable=(x.estado==='pendiente'||x.estado==='error')&&!evSubiendo;
+    const pill=x.estado==='ok'?'<span class="pill ok">✓ Subida</span>':x.estado==='subiendo'?'<span class="pill pend">Subiendo…</span>':x.estado==='error'?'<span class="pill bad">Error</span>':x.estado==='rechazado'?'<span class="pill bad">No válido</span>':'<span class="pill gris">Pendiente</span>';
+    const quitar=!evSubiendo&&x.estado!=='ok'&&x.estado!=='subiendo'?`<button class="mini danger" data-i="${x.id}" onclick="evQuitar(this.dataset.i)" aria-label="Quitar archivo">✕</button>`:'';
+    return `<div class="asrow"><div style="flex:1;min-width:220px">
+      <input class="input" style="text-align:left;padding:9px" maxlength="100" value="${esc(x.nombre)}" ${editable?'':'disabled'} data-i="${x.id}" oninput="evNombreCola(this.dataset.i,this.value)" aria-label="Nombre de la evidencia">
+      <div class="muted" style="margin-top:3px">${x.ext?'.'+esc(x.ext)+' · ':''}${fmtTam(x.file.size)} · ${esc(x.file.name)}${x.msg?' · <span style="color:var(--bad-tx)">'+esc(x.msg)+'</span>':''}</div></div>
+      <div class="row">${pill}${quitar}</div></div>`}).join('');
+  const b=$('btnSubirEv');
+  if(b){b.disabled=evSubiendo||n===0;b.textContent=evSubiendo?'Subiendo... no cierres la página':(n?'Subir '+n+' archivo'+(n>1?'s':''):'Subir evidencia')}
+}
+async function subirEvidencias(){
+  if(evSubiendo)return;
   const f=fichaAct(),ses=ssGet();
-  const sec=$('evSec').value,nom=$('evNombre').value.trim(),file=$('evArchivo').files[0];
+  const sec=$('evSec').value;
+  const pend=evCola.filter(x=>x.estado==='pendiente'||x.estado==='error');
   if(!sec){alert('Elige la sección de trabajo.');return}
-  if(!nom){alert('Escribe el nombre de la evidencia.');return}
-  if(!file){alert('Elige el archivo.');return}
-  if(BLOQ_EXT.test(file.name)){alert('Ese tipo de archivo no está permitido.');return}
+  if(!pend.length){alert('Elige al menos un archivo válido.');return}
   if(!ses){alert('Tu sesión expiró. Sal y vuelve a entrar.');return}
   if(!RE_SCRIPT.test(f.driveScript||'')){alert('La carga de evidencias no está bien configurada. Avisa a tu instructor.');return}
-  const btn=$('btnSubirEv');btn.disabled=true;btn.textContent='Subiendo... no cierres la página';
+  /* nombres únicos dentro de esta tanda (mismo nombre y misma extensión) */
+  const vistos=new Set();
+  pend.forEach(it=>{
+    const base=(it.nombre||'').trim()||baseDe(it.file.name)||'evidencia';
+    let n=base,k=2;
+    while(vistos.has((n+'|'+it.ext).toLowerCase())){n=base+' ('+k+')';k++}
+    vistos.add((n+'|'+it.ext).toLowerCase());it.nombre=n;
+  });
+  evSubiendo=true;
+  let ok=0,fail=0,stop=false;
+  for(const it of pend){
+    if(stop)break;
+    it.estado='subiendo';it.msg='';pintarCola();
+    const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),330000);
+    try{
+      const pre=await prepararEvidencia(it.file);
+      const resp=await fetch(f.driveScript,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},redirect:'follow',signal:ctl.signal,
+        body:JSON.stringify({doc:SES.id,ficha:SES.ficha,pin:ses.p,seccion:sec,nombre:it.nombre,archivo:pre.archivo,tipo:pre.tipo,datos:pre.datos})});
+      const j=await resp.json();
+      if(j&&j.ok){it.estado='ok';ok++}
+      else{
+        it.estado='error';fail++;
+        it.msg=MSG_EV[j&&j.error]||('No se pudo subir'+(j&&j.error?': '+j.error:''));
+        if(j&&ERR_DEFINITIVOS.includes(j.error))stop=true;
+      }
+    }catch(e){
+      it.estado='error';fail++;
+      it.msg=e&&e.name==='AbortError'?'Tardó demasiado. Reintenta.':(e&&e.message&&!/fetch|network/i.test(e.message)?e.message:'Sin conexión o sin respuesta. Reintenta.');
+    }
+    clearTimeout(t);
+    pintarCola();
+  }
+  evSubiendo=false;
+  try{await cargarAprendiz(SES.id,SES.ficha,ses.p)}catch(e){}
+  evCola=evCola.filter(x=>x.estado!=='ok');
+  renderAll();
+  const s2=$('evSec');if(s2)s2.value=sec;
+  toast(fail===0?(ok===1?'Evidencia subida a tu carpeta':ok+' evidencias subidas a tu carpeta'):ok+' subida'+(ok===1?'':'s')+' y '+fail+' con error. Revisa la lista y reintenta.');
+}
+
+
+async function evEliminar(id){
+  if(evSubiendo)return;
+  const f=fichaAct(),ses=ssGet(),e=f.evidencias.find(x=>String(x.id)===String(id));
+  if(!e)return;
+  if(!ses){alert('Tu sesión expiró. Sal y vuelve a entrar.');return}
+  if(!RE_SCRIPT.test(f.driveScript||'')){alert('La carga de evidencias no está bien configurada. Avisa a tu instructor.');return}
+  if(!confirm('¿Eliminar «'+e.nombre+'»?\n\nSe borrará de tu carpeta de Drive y de la plataforma.'))return;
+  toast('Eliminando...');
   try{
-    const pre=await prepararEvidencia(file);
     const resp=await fetch(f.driveScript,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},redirect:'follow',
-      body:JSON.stringify({doc:SES.id,ficha:SES.ficha,pin:ses.p,seccion:sec,nombre:nom,archivo:pre.archivo,tipo:pre.tipo,datos:pre.datos})});
+      body:JSON.stringify({accion:'eliminar',doc:SES.id,ficha:SES.ficha,pin:ses.p,id:e.id})});
     const j=await resp.json();
-    if(!j||!j.ok){alert(MSG_EV[j&&j.error]||('No se pudo subir la evidencia'+(j&&j.error?': '+j.error:'.')));return}
+    if(!j||!j.ok){alert(MSG_EV[j&&j.error]||('No se pudo eliminar'+(j&&j.error?': '+j.error:'.')));return}
     await cargarAprendiz(SES.id,SES.ficha,ses.p);
     renderAll();
-    toast(j.aviso?'Evidencia guardada en Drive. Avisa a tu instructor si no aparece en tu lista.':'Evidencia subida a tu carpeta');
-  }catch(e){alert('No se pudo subir la evidencia: '+(e.message||e))}
-  finally{const b=$('btnSubirEv');if(b){b.disabled=false;b.textContent='Subir evidencia'}}
+    toast('Evidencia eliminada');
+  }catch(err){alert('No se pudo eliminar: '+(err&&err.message?err.message:'sin respuesta del servicio. Intenta de nuevo.'))}
 }
 
 /* ============ Arranque: recuperar sesión si ya había una ============ */
