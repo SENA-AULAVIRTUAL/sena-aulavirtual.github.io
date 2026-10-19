@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <style>
 :root{
   box-sizing:border-box;
@@ -272,6 +273,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
      <a onclick="showTab('asist',this)">✅ Asistencia <span id="badgeExc" class="dotc"></span></a>
      <a onclick="showTab('horario',this)">🗓️ Horario</a>
      <a onclick="showTab('evid',this)">📁 Evidencias</a>
+     <a onclick="showTab('plan',this)">📝 Plan de trabajo</a>
      <a onclick="showTab('lista',this)">👥 Aprendices <span id="badgeSol" class="dotc"></span></a>
    </div>
    <div class="menu" style="margin-top:14px" id="menuAprendiz">
@@ -279,6 +281,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
      <a onclick="showTab('asistencia',this)">✅ Mi asistencia</a>
      <a onclick="showTab('horarioap',this)">🗓️ Mi horario</a>
      <a onclick="showTab('evidap',this)">📁 Mis evidencias</a>
+     <a onclick="showTab('planap',this)">📝 Mi plan de trabajo</a>
    </div>
   </div>
 
@@ -338,6 +341,15 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
      </div>
      <div class="box"><div class="row" style="justify-content:space-between"><h2>Evidencias recibidas</h2><button class="mini ghost" onclick="refrescarEvidencias(true)">↻ Actualizar</button></div><div id="evRecibidas" style="margin-top:8px"></div></div>
    </div>
+   <div id="tab-plan" class="tab">
+     <div class="box"><h2>Plan de trabajo concertado · Ficha <span class="fichaActiva"></span></h2>
+       <p class="muted" style="margin-top:4px">Defines las actividades una sola vez y se arma el plan de cada aprendiz EN FORMACIÓN. Hay dos versiones: el <b>plan inicial</b> (fecha de inicio) y el <b>plan final</b> (fecha de entrega y SI/NO). Cada una se publica y se descarga en PDF por separado.</p>
+       <div class="row" style="margin-top:10px;align-items:center"><div class="label" style="margin:0">Trimestre</div><select id="plTri" class="input" style="width:auto;text-align:left" onchange="selTrimPlan(this.value)"></select></div>
+     </div>
+     <div class="box" id="plDatos"></div>
+     <div class="box" id="plActs"></div>
+     <div class="box" id="plSeg"></div>
+   </div>
    <div id="tab-lista" class="tab"><div class="box"><h2>Aprendices · Ficha <span class="fichaActiva"></span></h2>
 <div id="boxSolicitudes" style="margin-top:10px"></div>
 <p class="muted" style="margin-top:8px">Cada aprendiz crea su PIN desde el ingreso con «Primera vez» y tú lo apruebas aquí. Tras 5 intentos fallidos, su acceso se bloquea 15 minutos.</p><div id="listaCompleta" style="margin-top:10px"></div></div></div>
@@ -347,6 +359,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
    <div id="tab-asistencia" class="tab"><div class="box" id="miAsistencia"></div></div>
    <div id="tab-horarioap" class="tab"><div class="box" id="miHorario"></div></div>
    <div id="tab-evidap" class="tab"><div class="box" id="misEvid"></div></div>
+   <div id="tab-planap" class="tab"><div class="box" id="miPlan"></div></div>
   </div>
  </div>
 </div>
@@ -383,7 +396,7 @@ function prefSet(n){try{n?localStorage.setItem('sena_ficha_activa',n):localStora
 function fichaDesdeFila(r){
   return{numero:r.numero,nombre:r.nombre||'',codigo:r.codigo||'',jornada:r.jornada||'',estadoFicha:r.estado_ficha||'',
     inicio:r.inicio||'',fin:r.fin||'',modalidad:r.modalidad||'',centro:r.centro||'',reporte:r.reporte||'',
-    estructura:r.estructura||[],aprendices:[],juicios:{},asistencia:{},sesiones:{},excusas:[],horario:{},secciones:[],evidencias:[],driveCarpeta:r.drive_carpeta||'',driveScript:r.drive_script||''};
+    estructura:r.estructura||[],aprendices:[],juicios:{},asistencia:{},sesiones:{},excusas:[],horario:{},secciones:[],evidencias:[],driveCarpeta:r.drive_carpeta||'',driveScript:r.drive_script||'',planesT:{},misPlanes:[]};
 }
 async function fetchAll(tabla,orden,cols){
   let out=[],desde=0;const paso=1000;   // Supabase entrega máximo 1000 filas por consulta
@@ -408,6 +421,13 @@ async function cargarInstructor(){
   const tr=await fetchAll('trimestres',['ficha','trimestre']);
   const hb=await fetchAll('horario_bloques',['ficha','trimestre','dia','hora_ini']);
   const sc=await fetchAll('secciones_trabajo',['ficha','orden']);
+  let pl=[],pa=[],po=[],pe=[];
+  try{
+    pl=await fetchAll('planes',['ficha','trimestre']);
+    pa=await fetchAll('plan_actividades',['ficha','trimestre','orden']);
+    po=await fetchAll('plan_observaciones',['ficha','trimestre','doc']);
+    pe=await fetchAll('plan_entregas',['ficha','doc']);
+  }catch(e){}
   const ev=await fetchAll('evidencias',['ficha','creado']);
   const nuevo={fichas:{}};
   fs.forEach(r=>{nuevo.fichas[r.numero]=fichaDesdeFila(r)});
@@ -420,6 +440,11 @@ async function cargarInstructor(){
   ex.forEach(x=>{const f=nuevo.fichas[x.ficha];if(f)f.excusas.push({doc:x.doc,fecha:x.fecha,estado:x.estado,comentario:x.comentario||'',nombre_archivo:x.nombre_archivo||''})});
   sc.forEach(x=>{const f=nuevo.fichas[x.ficha];if(f)f.secciones.push({id:x.id,nombre:x.nombre,descripcion:x.descripcion||'',trimestre:x.trimestre||'',orden:x.orden||0,abierta:x.abierta!==false})});
   ev.forEach(x=>{const f=nuevo.fichas[x.ficha];if(f)f.evidencias.push({id:x.id,doc:x.doc,seccion_id:x.seccion_id,seccion_nombre:x.seccion_nombre||'',nombre:x.nombre||'',archivo:x.archivo||'',drive_url:x.drive_url||'',creado:x.creado||''})});
+  const planDeAct={};
+  pl.forEach(x=>{const f=nuevo.fichas[x.ficha];if(f)f.planesT[x.trimestre]={proyecto:x.proyecto_formativo||'',fase:x.fase||'',instructor:x.instructor_nombre||'',version:x.version||'V2.0',pubI:!!x.publicado_inicial,pubF:!!x.publicado_final,actividades:[],obs:{},entregas:{}}});
+  pa.forEach(x=>{const f=nuevo.fichas[x.ficha],p=f&&f.planesT[x.trimestre];if(!p)return;planDeAct[x.id]=p;p.actividades.push({id:x.id,orden:x.orden,rap_codigo:x.rap_codigo||'',rap_texto:x.rap_texto||'',materia:x.materia||'',actividad:x.actividad,fisica:!!x.entrega_fisica,digital:!!x.entrega_digital,concertada:x.fecha_concertada||'',final:x.fecha_final||'',seccion_id:x.seccion_id||''})});
+  po.forEach(x=>{const f=nuevo.fichas[x.ficha],p=f&&f.planesT[x.trimestre];if(p&&x.texto)p.obs[x.doc]=x.texto});
+  pe.forEach(x=>{const p=planDeAct[x.actividad_id];if(p)(p.entregas[x.actividad_id]=p.entregas[x.actividad_id]||{})[x.doc]=x.entrego});
   DB=nuevo;
 }
 async function cargarAprendiz(d,f,p){
@@ -438,6 +463,7 @@ async function cargarAprendiz(d,f,p){
   fi._diag={conClave:('trimestres' in data),nTrim:(data.trimestres||[]).length,nBloques:(data.horario||[]).length};
   (data.trimestres||[]).forEach(t=>{fi.horario[t.trimestre]={inicio:t.inicio||'',fin:t.fin||'',generado:'',bloques:[]}});
   (data.horario||[]).forEach(b=>{const h=fi.horario[b.trimestre];if(h)h.bloques.push({dia:b.dia,ini:b.ini,fin:b.fin,horas:b.horas,aula:b.aula||'',materia:b.materia||'',raps:b.raps||[],instructor:b.instructor||'',vinculacion:b.vinculacion||''})});
+  try{const rp=await sb.rpc('aprendiz_plan',{p_doc:d,p_ficha:f,p_pin:p});if(!rp.error&&rp.data&&!rp.data.error)fi.misPlanes=rp.data.planes||[]}catch(e){}
   DB={fichas:{[fi.numero]:fi}};
   return true;
 }
@@ -752,7 +778,7 @@ function renderDetalle(doc){
 function verDetalle(doc){filtro='todos';renderDetalle(doc);abrir('modalDet')}
 
 /* ============ Render ============ */
-function renderAll(){renderFichas();renderJuicios();renderLista();renderAprendiz();renderAsistInstructor();renderAsistAprendiz();renderHorarioIns();renderHorarioAp();renderEvidIns();renderEvidAp()}
+function renderAll(){renderFichas();renderJuicios();renderLista();renderAprendiz();renderAsistInstructor();renderAsistAprendiz();renderHorarioIns();renderHorarioAp();renderEvidIns();renderEvidAp();renderPlanIns();renderPlanAp()}
 
 function renderFichas(){
   if(!SES||SES.rol!=='instructor')return;
@@ -1842,6 +1868,441 @@ async function evEliminar(id){
     renderAll();
     toast('Evidencia eliminada');
   }catch(err){alert('No se pudo eliminar: '+(err&&err.message?err.message:'sin respuesta del servicio. Intenta de nuevo.'))}
+}
+
+/* ============ PDF del plan de trabajo concertado (pdf-lib) ============ */
+function pdfTxt(s){
+  return String(s==null?'':s)
+    .replace(/[\u2018\u2019]/g,"'").replace(/[\u201C\u201D]/g,'"').replace(/[\u2013\u2014]/g,'-').replace(/\u2026/g,'...')
+    .replace(/[^\n\x20-\x7E\u00A0-\u00FF]/g,'').replace(/[ \t]+/g,' ').trim();
+}
+function pdfWrap(texto,font,size,ancho){
+  const lineas=[];
+  String(texto).split('\n').forEach(par=>{
+    let linea='';
+    par.split(' ').forEach(pal=>{
+      let p=pal;
+      while(p&&font.widthOfTextAtSize(p,size)>ancho){
+        let k=p.length;while(k>1&&font.widthOfTextAtSize(p.slice(0,k),size)>ancho)k--;
+        if(linea){lineas.push(linea);linea=''}
+        lineas.push(p.slice(0,k));p=p.slice(k);
+      }
+      const t=linea?linea+' '+p:p;
+      if(font.widthOfTextAtSize(t,size)<=ancho)linea=t;else{if(linea)lineas.push(linea);linea=p}
+    });
+    lineas.push(linea);
+  });
+  return lineas;
+}
+function fechaDMA(s){const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?m[3]+'/'+m[2]+'/'+m[1]:''}
+
+/* planes: [{ficha:{numero,nombre}, plan:{proyecto,fase,instructor,version,borrador}, aprendiz:{nombre,tipo,doc}, observaciones, actividades:[{numero,rapTexto,materia,actividad,fisica,digital,concertada,final,entrego}]}]
+   logoBytes: Uint8Array del logo (opcional) */
+async function generarPlanPDF(planes,logoBytes){
+  const{PDFDocument,StandardFonts,rgb}=PDFLib;
+  const doc=await PDFDocument.create();
+  const F=await doc.embedFont(StandardFonts.Helvetica),B=await doc.embedFont(StandardFonts.HelveticaBold);
+  let logo=null;
+  if(logoBytes){try{logo=await doc.embedPng(logoBytes)}catch(e){try{logo=await doc.embedJpg(logoBytes)}catch(e2){logo=null}}}
+  const W=792,H=612,M=36,AN=W-2*M;
+  const VERDE=rgb(0.886,0.937,0.855),NEGRO=rgb(0,0,0),GRIS=rgb(0.62,0.62,0.62),ROJO=rgb(0.72,0.11,0.11);
+  const COLS=[190,30,200,40,40,62,62,48,48];
+  const colX=[];COLS.reduce((x,w,i)=>{colX[i]=M+x;return x+w},0);
+
+  let page,pagina;
+  const nueva=()=>{page=doc.addPage([W,H]);return page};
+  const rect=(x,yT,w,h,o={})=>page.drawRectangle({x,y:H-yT-h,width:w,height:h,color:o.fill,borderColor:o.borde===false?undefined:NEGRO,borderWidth:o.borde===false?0:(o.grosor||0.8)});
+  const txt=(s,x,yT,size,o={})=>{const f=o.bold?B:F;page.drawText(pdfTxt(s),{x,y:H-yT-size,size,font:f,color:o.color||NEGRO})};
+  const ancho=(s,size,bold)=>(bold?B:F).widthOfTextAtSize(pdfTxt(s),size);
+  const centrado=(s,xc,yT,size,o={})=>{const t=pdfTxt(s);txt(t,xc-ancho(t,size,o.bold)/2,yT,size,o)};
+  /* texto en caja: envuelto y centrado vertical y horizontalmente */
+  const caja=(s,x,yT,w,h,size,o={})=>{
+    const lin=pdfWrap(pdfTxt(s),o.bold?B:F,size,w-8),lead=size*1.2,tot=lin.length*lead;
+    let y=yT+Math.max(2,(h-tot)/2);
+    lin.forEach(l=>{if(o.izq)txt(l,x+4,y,size,o);else centrado(l,x+w/2,y,size,o);y+=lead});
+  };
+  const etiqueta=(s,x,yT,w,h)=>{
+    const lin=pdfWrap(pdfTxt(s),B,8,w),lead=9.6,tot=lin.length*lead;
+    let y=yT+(h-tot)/2;lin.forEach(l=>{txt(l,x,y,8,{bold:true});y+=lead});
+  };
+
+  function encabezadoCompleto(P){
+    let y=M;
+    rect(M,y,AN,56);
+    if(logo){const h=44,w=logo.width*h/logo.height;page.drawImage(logo,{x:M+10,y:H-y-6-h,width:Math.min(w,90),height:h})}
+    centrado('SERVICIO NACIONAL DE APRENDIZAJE SENA',W/2+30,y+9,11,{bold:true});
+    centrado('CENTRO NACIONAL COLOMBO ALEMAN',W/2+30,y+24,9,{bold:true});
+    centrado(P.tipo==='inicial'?'PLAN DE TRABAJO - INICIAL':P.tipo==='final'?'PLAN DE TRABAJO - FINAL (ENTREGA)':'PLAN DE TRABAJO',W/2+30,y+38,8.5);
+    y=100;
+    etiqueta('Programa de Formación:',M,y,80,36);rect(M+84,y,232,36,{fill:VERDE});caja(P.ficha.nombre,M+84,y,232,36,8);
+    etiqueta('Instructor:',M+336,y,60,36);rect(M+400,y,320,36,{fill:VERDE});caja(P.plan.instructor,M+400,y,320,36,8.5);
+    y=142;
+    etiqueta('Número de Ficha:',M,y,80,30);rect(M+84,y,64,30,{fill:VERDE});caja(P.ficha.numero,M+84,y,64,30,8.5);
+    etiqueta('Proyecto Formativo:',M+156,y,70,30);rect(M+228,y,262,30,{fill:VERDE});caja(P.plan.proyecto,M+228,y,262,30,8);
+    etiqueta('Fase del Proyecto:',M+498,y,60,30);rect(M+560,y,160,30,{fill:VERDE});caja(P.plan.fase,M+560,y,160,30,8.5);
+    y=182;
+    etiqueta('Nombre del Aprendiz:',M,y,80,28);rect(M+84,y,232,28,{fill:VERDE});caja(P.aprendiz.nombre,M+84,y,232,28,8.5);
+    etiqueta('Documento de Identidad:',M,y+32,80,28);rect(M+84,y+32,232,28,{fill:VERDE});caja((P.aprendiz.tipo?P.aprendiz.tipo+' ':'')+P.aprendiz.doc,M+84,y+32,232,28,8.5);
+    rect(M+336,y,384,60,{fill:VERDE});txt('Observaciones:',M+342,y+4,8,{bold:true});
+    const ob=pdfWrap(pdfTxt(P.observaciones||''),F,8,372).slice(0,4);ob.forEach((l,i)=>txt(l,M+342,y+17+i*10,8));
+    return 256;
+  }
+  function encabezadoCorto(P){
+    rect(M,M,AN,22,{fill:VERDE});
+    txt('PLAN DE TRABAJO'+(P.tipo==='inicial'?' INICIAL':P.tipo==='final'?' FINAL':'')+'  -  Ficha '+P.ficha.numero+'  -  '+P.aprendiz.nombre,M+8,M+7,8.5,{bold:true});
+    return M+30;
+  }
+  function encabezadoTabla(y){
+    rect(M,y,AN,16);centrado('DESCRIPTORES PARA EL DESARROLLO DE LA RUTA DE APRENDIZAJE',W/2,y+4,8.5,{bold:true});
+    y+=16;const h1=22,h2=16,h=h1+h2;
+    const celda=(i,j,alto,t,yy,size)=>{rect(colX[i],yy,COLS.slice(i,j+1).reduce((a,b)=>a+b,0),alto);caja(t,colX[i],yy,COLS.slice(i,j+1).reduce((a,b)=>a+b,0),alto,size||8,{bold:true})};
+    celda(0,0,h,'Resultados de Aprendizaje',y);
+    celda(1,1,h,'No.\nAct.',y,7.5);
+    celda(2,2,h,'Actividades a desarrollar',y);
+    celda(3,4,h1,'Forma de Entrega',y,7.5);celda(3,3,h2,'Física',y+h1,7.5);celda(4,4,h2,'Digital',y+h1,7.5);
+    celda(5,6,h1,'Fecha de entrega',y,8);celda(5,5,h2,'Concertada',y+h1,7.5);celda(6,6,h2,'Final',y+h1,7.5);
+    celda(7,8,h1,'¿Entregó la Actividad?',y,7.5);celda(7,7,h2,'SI',y+h1,8);celda(8,8,h2,'NO',y+h1,8);
+    return y+h;
+  }
+  const FUENTE_RAP=7,LEAD_RAP=8.4,FUENTE_ACT=7.5,LEAD_ACT=9;
+  function altoFila(a){
+    const rap=pdfWrap(pdfTxt((a.rapTexto||'')+(a.materia?'\n'+a.materia:'')),F,FUENTE_RAP,COLS[0]-8).length*LEAD_RAP;
+    const act=pdfWrap(pdfTxt(a.actividad||''),F,FUENTE_ACT,COLS[2]-8).length*LEAD_ACT;
+    return Math.max(28,Math.max(rap,act)+8);
+  }
+  function fila(a,y,h,tipo){
+    COLS.forEach((w,i)=>rect(colX[i],y,w,h));
+    const rap=pdfWrap(pdfTxt((a.rapTexto||'')+(a.materia?'\n'+a.materia:'')),F,FUENTE_RAP,COLS[0]-8);
+    let yy=y+(h-rap.length*LEAD_RAP)/2;rap.forEach(l=>{centrado(l,colX[0]+COLS[0]/2,yy,FUENTE_RAP);yy+=LEAD_RAP});
+    centrado(String(a.numero),colX[1]+COLS[1]/2,y+(h-8)/2,8);
+    const act=pdfWrap(pdfTxt(a.actividad||''),F,FUENTE_ACT,COLS[2]-8);
+    yy=y+(h-act.length*LEAD_ACT)/2;act.forEach(l=>{txt(l,colX[2]+4,yy,FUENTE_ACT);yy+=LEAD_ACT});
+    const x=(i)=>centrado('X',colX[i]+COLS[i]/2,y+(h-10)/2,10,{bold:true});
+    if(a.fisica)x(3);if(a.digital)x(4);
+    centrado(fechaDMA(a.concertada),colX[5]+COLS[5]/2,y+(h-8)/2,7.5);
+    if(tipo!=='inicial')centrado(fechaDMA(a.final),colX[6]+COLS[6]/2,y+(h-8)/2,7.5);
+    if(tipo!=='inicial'){
+      if(a.entrego===true)centrado('x',colX[7]+COLS[7]/2,y+(h-9)/2,9,{bold:true});
+      if(a.entrego===false)centrado('x',colX[8]+COLS[8]/2,y+(h-9)/2,9,{bold:true});
+    }
+  }
+  const pie=(P)=>{
+    const v=(P.plan.version||'V2.0');
+    page.drawText(pdfTxt(v),{x:W-M-ancho(v,8),y:M-18+8,size:8,font:F,color:GRIS});
+    if(P.plan.borrador)page.drawText('BORRADOR - aun no publicado a los aprendices',{x:M,y:M-18+8,size:8,font:B,color:ROJO});
+  };
+
+  for(const P of planes){
+    nueva();let y=encabezadoCompleto(P);y=encabezadoTabla(y);
+    const limite=H-M-8;
+    const acts=P.actividades.length?P.actividades:[];
+    for(const a of acts){
+      const h=altoFila(a);
+      if(y+h>limite){pie(P);nueva();y=encabezadoCorto(P);y=encabezadoTabla(y)}
+      fila(a,y,h,P.tipo);y+=h;
+    }
+    if(!acts.length){rect(M,y,AN,30);centrado('Este plan todavía no tiene actividades.',W/2,y+11,8.5)}
+    pie(P);
+  }
+  return await doc.save();
+}
+
+/* ============ Plan de trabajo concertado (interfaz) ============ */
+/* Dos versiones del mismo plan:
+   - INICIAL: actividades + fecha de inicio concertada.
+   - FINAL:   lo anterior + fecha de entrega + ¿Entregó? (SI / NO).
+   Cada una se publica por separado y se descarga en PDF. */
+let plSel=null,plEdit=null,plExtra=[],plSelAp=null;
+const SIGLA_RE=/^\d{4}-[IVX]+$/;
+const ETQ_PLAN={inicial:'Plan inicial',final:'Plan final'};
+
+function planTrims(f){return [...new Set([...Object.keys(f.horario||{}),...Object.keys(f.planesT||{}),...plExtra])].sort().reverse()}
+function entregoEfectivo(f,tri,act,doc){
+  const p=f.planesT[tri],ex=p&&p.entregas[act.id]&&p.entregas[act.id][doc];
+  if(ex===true||ex===false)return{v:ex,auto:false};
+  if(act.seccion_id&&f.evidencias.some(e=>e.doc===doc&&e.seccion_id===act.seccion_id))return{v:true,auto:true};
+  return{v:null,auto:false};
+}
+function nombrePlan(a){return (a.nombre+' '+a.apellidos).trim()}
+function datosPlanPDF(f,tri,a,tipo){
+  const p=f.planesT[tri];
+  return{tipo,ficha:{numero:f.numero,nombre:f.nombre},
+    plan:{proyecto:p.proyecto,fase:p.fase,instructor:p.instructor,version:p.version,borrador:!(tipo==='inicial'?p.pubI:p.pubF)},
+    aprendiz:{nombre:nombrePlan(a),tipo:a.tipo,doc:a.doc},observaciones:p.obs[a.doc]||'',
+    actividades:p.actividades.slice().sort((x,y)=>x.orden-y.orden).map(x=>({numero:x.orden,rapTexto:x.rap_texto,materia:x.materia,actividad:x.actividad,fisica:x.fisica,digital:x.digital,concertada:x.concertada,final:x.final,entrego:entregoEfectivo(f,tri,x,a.doc).v}))};
+}
+async function logoBytes(){try{const r=await fetch('logo-verde.png');if(!r.ok)return null;return new Uint8Array(await r.arrayBuffer())}catch(e){return null}}
+function bajarPDF(bytes,nombre){
+  const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+  const a=document.createElement('a');a.href=url;a.download=nombre.replace(/[\\\/:*?"<>|]/g,' ');
+  document.body.appendChild(a);a.click();
+  setTimeout(()=>{a.remove();URL.revokeObjectURL(url)},60000);
+}
+async function crearPDF(planes,nombre){
+  if(!window.PDFLib){alert('No se pudo cargar el generador de PDF. Revisa tu conexión y recarga la página.');return}
+  try{
+    toast('Generando PDF...');
+    const bytes=await generarPlanPDF(planes,await logoBytes());
+    bajarPDF(bytes,nombre);
+  }catch(e){alert('No se pudo generar el PDF: '+(e.message||e))}
+}
+
+/* ---------- Instructor ---------- */
+function renderPlanIns(){
+  if(!SES||SES.rol!=='instructor')return;
+  const f=fichaAct(),elD=$('plDatos'),elA=$('plActs'),elS=$('plSeg'),sel=$('plTri');
+  if(!f){elD.innerHTML='<div class="empty">Sube un juicio evaluativo para crear la ficha.</div>';elA.innerHTML='';elS.innerHTML='';sel.innerHTML='';return}
+  const ts=planTrims(f);
+  if(!plSel||!ts.includes(plSel))plSel=ts.find(t=>f.planesT[t])||ts[0]||null;
+  const estado=t=>{const p=f.planesT[t];return !p?' · sin plan':' · '+(p.pubI?'inicial ✓':'inicial –')+' '+(p.pubF?'final ✓':'final –')};
+  sel.innerHTML=ts.map(t=>`<option value="${esc(t)}" ${t===plSel?'selected':''}>${esc(t)}${esc(estado(t))}</option>`).join('')+'<option value="__otro">Otro trimestre...</option>';
+  if(!plSel){elD.innerHTML='<div class="empty">Sube el horario de la ficha (o elige «Otro trimestre») para crear el plan.</div>';elA.innerHTML='';elS.innerHTML='';return}
+  const p=f.planesT[plSel];
+  if(!p){
+    elD.innerHTML=`<div class="empty">La ficha ${esc(f.numero)} todavía no tiene plan de trabajo para el trimestre ${esc(plSel)}.<br><button class="btn auto" style="background:var(--dgreen);margin-top:12px" onclick="crearPlan()">Crear plan de trabajo ${esc(plSel)}</button></div>`;
+    elA.innerHTML='';elS.innerHTML='';return;
+  }
+  const comps=f.estructura.map(c=>partes(c.c).nom);
+  const pub=(tipo,on)=>`<div class="asrow"><div><b>${ETQ_PLAN[tipo]}</b> <span class="pill ${on?'ok':'pend'}">${on?'Publicado a los aprendices':'Borrador (solo lo ves tú)'}</span>
+      <div class="muted">${tipo==='inicial'?'Actividades y fecha de inicio concertada.':'Agrega la fecha de entrega y si entregó cada actividad.'}</div></div>
+      <div class="row"><button class="mini ${on?'ghost':''}" onclick="alternarPublicado('${tipo}')">${on?'Quitar publicación':'Publicar'}</button>
+      <button class="mini ghost" onclick="descargarPlanTodos('${tipo}')">PDF de toda la ficha</button></div></div>`;
+  elD.innerHTML=`<h2>Datos del plan · ${esc(plSel)}</h2>
+    <div class="label">Proyecto formativo</div>
+    <input id="plProyecto" class="input" style="text-align:left" list="dlComp" value="${esc(p.proyecto)}" placeholder="Ej: MECANIZAR PIEZA INDUSTRIAL DE ACUERDO CON SISTEMA DE CONTROL NUMÉRICO">
+    <datalist id="dlComp">${comps.map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
+    <div class="row" style="align-items:flex-end">
+      <div style="flex:1;min-width:180px"><div class="label">Fase del proyecto</div><input id="plFase" class="input" style="text-align:left" value="${esc(p.fase)}" placeholder="Ej: FABRICACION"></div>
+      <div style="flex:2;min-width:220px"><div class="label">Instructor (nombre completo)</div><input id="plInstr" class="input" style="text-align:left" value="${esc(p.instructor)}" placeholder="Como debe salir en el PDF"></div>
+      <div style="width:90px"><div class="label">Versión</div><input id="plVersion" class="input" style="text-align:left" maxlength="10" value="${esc(p.version)}"></div>
+    </div>
+    <div class="row" style="margin:14px 0 10px"><button class="btn auto" style="background:var(--dgreen)" onclick="guardarDatosPlan()">Guardar datos</button><button class="mini danger" onclick="borrarPlan()">Borrar plan</button></div>
+    <h2 style="font-size:15px;margin:6px 0">Los dos planes</h2>${pub('inicial',p.pubI)}${pub('final',p.pubF)}`;
+  renderPlanActs(f,p);
+  renderPlanSeg(f,p);
+}
+function planRapsOpts(f,sel){
+  return f.estructura.map(c=>`<optgroup label="${esc(partes(c.c).nom.slice(0,90))}">${c.rs.map(r=>{const m=partes(r);return `<option value="${esc(r)}" ${m.cod===sel?'selected':''}>${esc(m.cod)} · ${esc(m.nom.slice(0,90))}</option>`}).join('')}</optgroup>`).join('');
+}
+function renderPlanActs(f,p){
+  const ed=plEdit?p.actividades.find(x=>x.id===plEdit):null;
+  const v=ed||{rap_codigo:'',materia:'',actividad:'',fisica:false,digital:true,concertada:'',final:'',seccion_id:''};
+  const secs=f.secciones.slice().sort((a,b)=>(a.orden-b.orden)||a.nombre.localeCompare(b.nombre,'es'));
+  const lista=p.actividades.slice().sort((a,b)=>a.orden-b.orden).map((x,i,arr)=>{
+    const sec=secs.find(s=>s.id===x.seccion_id);
+    return `<div class="asrow"><div style="flex:1;min-width:240px"><b>${esc(x.orden)}. ${esc(x.actividad)}</b>
+      <div class="muted">${esc(x.rap_codigo)} · ${esc(x.rap_texto)}${x.materia?' · '+esc(x.materia):''}</div>
+      <div class="muted">${[x.fisica?'Física':'',x.digital?'Digital':''].filter(Boolean).join(' y ')||'Sin forma de entrega'} · Inicio: ${esc(fechaDMA(x.concertada)||'sin fecha')} · Entrega: ${esc(fechaDMA(x.final)||'sin fecha')}${sec?' · Evidencias: '+esc(sec.nombre):''}</div></div>
+      <div class="row">
+        <button class="mini ghost" data-i="${esc(x.id)}" data-d="-1" onclick="moverActividad(this.dataset.i,this.dataset.d)" ${i===0?'disabled':''} aria-label="Subir">↑</button>
+        <button class="mini ghost" data-i="${esc(x.id)}" data-d="1" onclick="moverActividad(this.dataset.i,this.dataset.d)" ${i===arr.length-1?'disabled':''} aria-label="Bajar">↓</button>
+        <button class="mini ghost" data-i="${esc(x.id)}" onclick="editarActividad(this.dataset.i)">Editar</button>
+        <button class="mini danger" data-i="${esc(x.id)}" onclick="borrarActividad(this.dataset.i)" aria-label="Borrar">🗑️</button></div></div>`}).join('');
+  $('plActs').innerHTML=`<h2>Actividades a desarrollar</h2>
+    <p class="muted" style="margin-top:4px">Salen de la guía y de la planeación pedagógica. Se escriben una sola vez y valen para todos los aprendices.</p>
+    <div class="box" style="background:var(--soft);margin:10px 0">
+      <b>${ed?'Editando la actividad '+esc(ed.orden):'Nueva actividad'}</b>
+      <div class="label">Resultado de aprendizaje</div>
+      <select id="plRap" class="input" style="text-align:left" onchange="plRapCambio()"><option value="">Elige el resultado</option>${planRapsOpts(f,v.rap_codigo)}</select>
+      <div class="label">Materia (opcional)</div><input id="plMateria" class="input" style="text-align:left" value="${esc(v.materia||'')}" placeholder="Ej: MECANIZADO CNC 2">
+      <div class="label">Actividad a desarrollar</div><textarea id="plAct" class="input" style="text-align:left;min-height:64px;font-weight:600" maxlength="400">${esc(v.actividad)}</textarea>
+      <div class="row" style="margin-top:8px;align-items:flex-end">
+        <label style="font-size:13px"><input type="checkbox" id="plFis" ${v.fisica?'checked':''}> Entrega física</label>
+        <label style="font-size:13px"><input type="checkbox" id="plDig" ${v.digital?'checked':''}> Entrega digital</label>
+        <div><div class="label" style="margin-top:0">Fecha de inicio (concertada)</div><input type="date" id="plFecC" class="input" style="width:auto" value="${esc(v.concertada||'')}"></div>
+        <div><div class="label" style="margin-top:0">Fecha de entrega (final)</div><input type="date" id="plFecF" class="input" style="width:auto" value="${esc(v.final||'')}"></div>
+      </div>
+      <p class="hint" style="text-align:left">El plan inicial muestra solo la fecha de inicio. La fecha de entrega aparece en el plan final, así que puedes dejarla en blanco y completarla después.</p>
+      <div class="label">Sección de evidencias ligada (opcional)</div>
+      <select id="plSec" class="input" style="text-align:left"><option value="">Ninguna: marco la entrega a mano</option>${secs.map(s=>`<option value="${esc(s.id)}" ${s.id===v.seccion_id?'selected':''}>${esc(s.nombre)}</option>`).join('')}</select>
+      <p class="hint" style="text-align:left">Si ligas una sección, la actividad cuenta como entregada cuando el aprendiz sube una evidencia en ella.</p>
+      <div class="row" style="margin-top:10px"><button class="btn auto" style="background:var(--dgreen)" onclick="guardarActividad()">${ed?'Guardar cambios':'Agregar actividad'}</button>${ed?'<button class="btn auto sec" onclick="cancelarEdicionAct()">Cancelar</button>':''}</div>
+    </div>`+(lista||'<div class="empty" style="padding:14px">Todavía no hay actividades.</div>');
+}
+function renderPlanSeg(f,p){
+  const act=f.aprendices.filter(a=>!inactivo(a)).sort((a,b)=>(a.apellidos+a.nombre).localeCompare(b.apellidos+b.nombre,'es'));
+  const acts=p.actividades.slice().sort((a,b)=>a.orden-b.orden);
+  if(!acts.length){$('plSeg').innerHTML='<h2>Seguimiento de entregas</h2><div class="empty" style="padding:14px">Agrega actividades para hacer el seguimiento.</div>';return}
+  const filas=act.map(a=>`<tr><td style="min-width:170px"><b>${esc(a.apellidos)}</b> ${esc(a.nombre)}</td>
+    ${acts.map(x=>{
+      const e=entregoEfectivo(f,plSel,x,a.doc);
+      const cl=e.v===true?'ok':e.v===false?'bad':'gris',t=e.v===true?'SI':e.v===false?'NO':'—';
+      return `<td style="text-align:center"><button class="pill ${cl}" style="border:none;cursor:pointer;min-width:42px" data-a="${esc(x.id)}" data-d="${esc(a.doc)}" onclick="ciclarEntrega(this.dataset.a,this.dataset.d)" title="${e.auto?'Calculado por las evidencias. Toca para marcar a mano.':'Toca para cambiar'}">${t}${e.auto?'*':''}</button></td>`}).join('')}
+    <td><button class="mini ghost" data-d="${esc(a.doc)}" onclick="editarObservacion(this.dataset.d)">${p.obs[a.doc]?'Observación ✓':'Observación'}</button></td>
+    <td style="white-space:nowrap"><button class="mini" data-d="${esc(a.doc)}" onclick="descargarPlanAprendiz(this.dataset.d,'inicial')">PDF inicial</button> <button class="mini" data-d="${esc(a.doc)}" onclick="descargarPlanAprendiz(this.dataset.d,'final')">PDF final</button></td></tr>`).join('');
+  $('plSeg').innerHTML=`<h2>Seguimiento de entregas (plan final)</h2>
+    <p class="muted" style="margin:4px 0 8px">Toca una casilla para cambiarla: SI → NO → automática. El asterisco (*) indica que la calcula la plataforma con las evidencias.</p>
+    <div class="tblwrap"><table class="tbl"><thead><tr><th>Aprendiz</th>${acts.map(x=>`<th style="text-align:center" title="${esc(x.actividad)}">${esc(x.orden)}</th>`).join('')}<th></th><th></th></tr></thead><tbody>${filas||'<tr><td colspan=9 class=muted>No hay aprendices EN FORMACIÓN.</td></tr>'}</tbody></table></div>`;
+}
+function selTrimPlan(v){
+  if(v==='__otro'){
+    const t=(prompt('Trimestre (por ejemplo 2026-IV):','')||'').trim().toUpperCase();
+    if(!SIGLA_RE.test(t)){if(t)alert('El trimestre debe verse así: 2026-IV');renderPlanIns();return}
+    if(!plExtra.includes(t))plExtra.push(t);plSel=t;
+  }else plSel=v;
+  plEdit=null;renderPlanIns();
+}
+async function crearPlan(){
+  const f=fichaAct();if(!f||!plSel)return;
+  const previo=Object.values(f.planesT).find(p=>p.instructor)||{};
+  const fila={ficha:f.numero,trimestre:plSel,instructor_nombre:previo.instructor||null,proyecto_formativo:previo.proyecto||null,fase:previo.fase||null,version:'V2.0',publicado_inicial:false,publicado_final:false};
+  const{error}=await sb.from('planes').upsert(fila,{onConflict:'ficha,trimestre'});
+  if(error){alert('No se pudo crear el plan: '+error.message);return}
+  f.planesT[plSel]={proyecto:fila.proyecto_formativo||'',fase:fila.fase||'',instructor:fila.instructor_nombre||'',version:'V2.0',pubI:false,pubF:false,actividades:[],obs:{},entregas:{}};
+  renderPlanIns();toast('Plan creado. Agrega las actividades.');
+}
+async function guardarDatosPlan(){
+  const f=fichaAct(),p=f&&f.planesT[plSel];if(!p)return;
+  const d={proyecto_formativo:$('plProyecto').value.trim(),fase:$('plFase').value.trim(),instructor_nombre:$('plInstr').value.trim(),version:$('plVersion').value.trim()||'V2.0',actualizado:new Date().toISOString()};
+  const{error}=await sb.from('planes').update(d).eq('ficha',f.numero).eq('trimestre',plSel);
+  if(error){alert('No se pudo guardar: '+error.message);return}
+  p.proyecto=d.proyecto_formativo;p.fase=d.fase;p.instructor=d.instructor_nombre;p.version=d.version;
+  renderPlanIns();toast('Datos del plan guardados');
+}
+async function alternarPublicado(tipo){
+  const f=fichaAct(),p=f&&f.planesT[plSel];if(!p)return;
+  const campo=tipo==='inicial'?'pubI':'pubF',col=tipo==='inicial'?'publicado_inicial':'publicado_final';
+  if(!p[campo]){
+    if(!p.actividades.length){alert('Agrega al menos una actividad antes de publicar.');return}
+    const falt=tipo==='inicial'?p.actividades.filter(a=>!a.concertada).length:p.actividades.filter(a=>!a.final).length;
+    const aviso=falt?'\n\nOjo: '+falt+' actividad'+(falt>1?'es':'')+' no tiene'+(falt>1?'n':'')+(tipo==='inicial'?' fecha de inicio.':' fecha de entrega.'):'';
+    if(!confirm('¿Publicar el '+ETQ_PLAN[tipo].toLowerCase()+' '+plSel+'? Los aprendices EN FORMACIÓN de la ficha podrán verlo y descargarlo.'+aviso))return;
+  }
+  const{error}=await sb.from('planes').update({[col]:!p[campo]}).eq('ficha',f.numero).eq('trimestre',plSel);
+  if(error){alert('No se pudo cambiar: '+error.message);return}
+  p[campo]=!p[campo];renderPlanIns();toast(p[campo]?ETQ_PLAN[tipo]+' publicado':ETQ_PLAN[tipo]+' oculto de nuevo');
+}
+async function borrarPlan(){
+  const f=fichaAct();if(!f||!f.planesT[plSel])return;
+  if(!confirm('¿Borrar el plan '+plSel+' (inicial y final) con sus actividades, observaciones y marcas de entrega? No se puede deshacer.'))return;
+  const{error}=await sb.from('planes').delete().eq('ficha',f.numero).eq('trimestre',plSel);
+  if(error){alert('No se pudo borrar: '+error.message);return}
+  delete f.planesT[plSel];plEdit=null;renderPlanIns();toast('Plan borrado');
+}
+function plRapCambio(){
+  const f=fichaAct(),rap=$('plRap').value;if(!f||!rap||$('plMateria').value.trim())return;
+  const cod=partes(rap).cod,h=f.horario[plSel];
+  const b=h&&h.bloques.find(x=>(x.raps||[]).some(r=>r.codigo===cod));
+  if(b&&b.materia)$('plMateria').value=b.materia;
+}
+function editarActividad(id){plEdit=id;renderPlanIns();$('plActs').scrollIntoView&&$('plActs').scrollIntoView()}
+function cancelarEdicionAct(){plEdit=null;renderPlanIns()}
+async function guardarActividad(){
+  const f=fichaAct(),p=f&&f.planesT[plSel];if(!p)return;
+  const rap=$('plRap').value,actividad=$('plAct').value.trim();
+  if(!rap){alert('Elige el resultado de aprendizaje.');return}
+  if(!actividad){alert('Escribe la actividad a desarrollar.');return}
+  const fc=$('plFecC').value,ff=$('plFecF').value;
+  if(fc&&ff&&fc>ff){alert('La fecha de inicio es posterior a la fecha de entrega.');return}
+  const m=partes(rap);
+  const fila={ficha:f.numero,trimestre:plSel,rap_codigo:m.cod,rap_texto:m.nom,materia:$('plMateria').value.trim()||null,actividad,
+    entrega_fisica:$('plFis').checked,entrega_digital:$('plDig').checked,fecha_concertada:fc||null,fecha_final:ff||null,seccion_id:$('plSec').value||null};
+  const local=id=>({id,orden:0,rap_codigo:fila.rap_codigo,rap_texto:fila.rap_texto,materia:fila.materia||'',actividad,fisica:fila.entrega_fisica,digital:fila.entrega_digital,concertada:fc,final:ff,seccion_id:fila.seccion_id||''});
+  if(plEdit){
+    const{error}=await sb.from('plan_actividades').update(fila).eq('id',plEdit);
+    if(error){alert('No se pudo guardar: '+error.message);return}
+    const x=p.actividades.find(a=>a.id===plEdit),o=x.orden;Object.assign(x,local(plEdit),{orden:o});
+    plEdit=null;toast('Actividad actualizada');
+  }else{
+    fila.orden=p.actividades.reduce((n,a)=>Math.max(n,a.orden),0)+1;
+    const{data,error}=await sb.from('plan_actividades').insert(fila).select().single();
+    if(error){alert('No se pudo agregar: '+error.message);return}
+    const x=local(data.id);x.orden=fila.orden;p.actividades.push(x);toast('Actividad agregada');
+  }
+  renderPlanIns();
+}
+async function borrarActividad(id){
+  const f=fichaAct(),p=f&&f.planesT[plSel],x=p&&p.actividades.find(a=>a.id===id);if(!x)return;
+  if(!confirm('¿Borrar la actividad '+x.orden+'? Se pierden también las marcas de entrega de esa actividad.'))return;
+  const{error}=await sb.from('plan_actividades').delete().eq('id',id);
+  if(error){alert('No se pudo borrar: '+error.message);return}
+  p.actividades=p.actividades.filter(a=>a.id!==id);delete p.entregas[id];
+  p.actividades.sort((a,b)=>a.orden-b.orden);
+  for(let i=0;i<p.actividades.length;i++){
+    const a=p.actividades[i];
+    if(a.orden!==i+1){const r=await sb.from('plan_actividades').update({orden:i+1}).eq('id',a.id);if(!r.error)a.orden=i+1}
+  }
+  if(plEdit===id)plEdit=null;
+  renderPlanIns();
+}
+async function moverActividad(id,dir){
+  const f=fichaAct(),p=f&&f.planesT[plSel];if(!p)return;
+  const l=p.actividades.slice().sort((a,b)=>a.orden-b.orden),i=l.findIndex(a=>a.id===id),j=i+Number(dir);
+  if(i<0||j<0||j>=l.length)return;
+  const a=l[i],b=l[j],oa=a.orden,ob=b.orden;
+  let r=await sb.from('plan_actividades').update({orden:ob}).eq('id',a.id);if(r.error){alert('No se pudo mover: '+r.error.message);return}
+  r=await sb.from('plan_actividades').update({orden:oa}).eq('id',b.id);if(r.error){alert('No se pudo mover: '+r.error.message);return}
+  a.orden=ob;b.orden=oa;renderPlanIns();
+}
+async function ciclarEntrega(actId,doc){
+  const f=fichaAct(),p=f&&f.planesT[plSel];if(!p)return;
+  const mapa=p.entregas[actId]=p.entregas[actId]||{},cur=mapa[doc];
+  let error=null;
+  if(cur===undefined){({error}=await sb.from('plan_entregas').upsert({actividad_id:actId,ficha:f.numero,doc,entrego:true},{onConflict:'actividad_id,doc'}));if(!error)mapa[doc]=true}
+  else if(cur===true){({error}=await sb.from('plan_entregas').upsert({actividad_id:actId,ficha:f.numero,doc,entrego:false},{onConflict:'actividad_id,doc'}));if(!error)mapa[doc]=false}
+  else{({error}=await sb.from('plan_entregas').delete().eq('actividad_id',actId).eq('doc',doc));if(!error)delete mapa[doc]}
+  if(error){alert('No se pudo guardar la marca: '+error.message);return}
+  renderPlanSeg(f,p);
+}
+async function editarObservacion(doc){
+  const f=fichaAct(),p=f&&f.planesT[plSel],a=f&&f.aprendices.find(x=>x.doc===doc);if(!p||!a)return;
+  const nuevo=prompt('Observación para '+nombrePlan(a)+' (sale en su plan):',p.obs[doc]||'');
+  if(nuevo===null)return;
+  const t=nuevo.trim();let error;
+  if(t)({error}=await sb.from('plan_observaciones').upsert({ficha:f.numero,trimestre:plSel,doc,texto:t},{onConflict:'ficha,trimestre,doc'}));
+  else({error}=await sb.from('plan_observaciones').delete().eq('ficha',f.numero).eq('trimestre',plSel).eq('doc',doc));
+  if(error){alert('No se pudo guardar: '+error.message);return}
+  if(t)p.obs[doc]=t;else delete p.obs[doc];
+  renderPlanSeg(f,p);toast('Observación guardada');
+}
+async function descargarPlanAprendiz(doc,tipo){
+  const f=fichaAct(),p=f&&f.planesT[plSel],a=f&&f.aprendices.find(x=>x.doc===doc);if(!p||!a)return;
+  await crearPDF([datosPlanPDF(f,plSel,a,tipo)],'Plan de trabajo '+tipo.toUpperCase()+' - '+(a.apellidos+' '+a.nombre).trim()+' - '+plSel+'.pdf');
+}
+async function descargarPlanTodos(tipo){
+  const f=fichaAct(),p=f&&f.planesT[plSel];if(!p)return;
+  const act=f.aprendices.filter(a=>!inactivo(a)).sort((a,b)=>(a.apellidos+a.nombre).localeCompare(b.apellidos+b.nombre,'es'));
+  if(!act.length){alert('No hay aprendices EN FORMACIÓN.');return}
+  await crearPDF(act.map(a=>datosPlanPDF(f,plSel,a,tipo)),'Plan de trabajo '+tipo.toUpperCase()+' - Ficha '+f.numero+' - '+plSel+'.pdf');
+}
+
+/* ---------- Aprendiz ---------- */
+function renderPlanAp(){
+  if(!SES||SES.rol!=='aprendiz')return;
+  const f=fichaAct(),el=$('miPlan');if(!f)return;
+  const ps=f.misPlanes||[];
+  if(!ps.length){el.innerHTML='<h2>Mi plan de trabajo</h2><div class="empty">Tu instructor todavía no ha publicado tu plan de trabajo.</div>';return}
+  if(!plSelAp||!ps.some(p=>p.trimestre===plSelAp))plSelAp=ps[0].trimestre;
+  const p=ps.find(x=>x.trimestre===plSelAp);
+  const chips=ps.length>1?`<div class="filtros">${ps.map(x=>`<button class="${x.trimestre===plSelAp?'on':''}" data-t="${esc(x.trimestre)}" onclick="selPlanAp(this.dataset.t)">${esc(x.trimestre)}</button>`).join('')}</div>`:'';
+  const filas=p.actividades.map(x=>{
+    const e=x.entrego,forma=[x.fisica?'Física':'',x.digital?'Digital':''].filter(Boolean).join(' y ')||'—';
+    const fechas='Inicio: '+esc(fechaDMA(x.concertada)||'—')+(p.final?' · Entrega: '+esc(fechaDMA(x.final)||'—'):'');
+    const pill=p.final?`<span class="pill ${e===true?'ok':e===false?'bad':'gris'}">${e===true?'Entregada':e===false?'No entregada':'Pendiente'}</span>`:'';
+    return `<div class="res"><div class="t"><b>${esc(x.numero)}. ${esc(x.actividad)}</b><div class="muted">${esc(x.rap_texto)}${x.materia?' · '+esc(x.materia):''}</div></div>${pill}
+      <div class="meta">Entrega: ${forma} · ${fechas}</div></div>`}).join('');
+  el.innerHTML=`<h2>Mi plan de trabajo</h2>${chips}
+    <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+      <div class="kpi"><span>Proyecto formativo</span><div style="font-weight:700;font-size:13px;margin-top:4px">${esc(p.proyecto||'—')}</div></div>
+      <div class="kpi"><span>Fase del proyecto</span><div style="font-weight:700;font-size:13px;margin-top:4px">${esc(p.fase||'—')}</div></div>
+      <div class="kpi"><span>Instructor</span><div style="font-weight:700;font-size:13px;margin-top:4px">${esc(p.instructor||'—')}</div></div>
+    </div>
+    ${p.observaciones?`<div class="warn" style="margin-bottom:10px"><b>Observaciones:</b> ${esc(p.observaciones)}</div>`:''}
+    <div class="row" style="margin-bottom:12px">
+      ${p.inicial?'<button class="btn auto" style="background:var(--dgreen)" onclick="descargarMiPlan(\'inicial\')">Descargar plan inicial (PDF)</button>':''}
+      ${p.final?'<button class="btn auto" style="background:var(--dgreen)" onclick="descargarMiPlan(\'final\')">Descargar plan final (PDF)</button>':''}
+    </div>
+    ${p.final?'':'<p class="muted" style="margin-bottom:8px">El plan final, con las fechas de entrega y tus resultados, estará disponible cuando tu instructor lo publique.</p>'}
+    ${filas||'<div class="empty" style="padding:14px">Este plan todavía no tiene actividades.</div>'}`;
+}
+function selPlanAp(t){plSelAp=t;renderPlanAp()}
+async function descargarMiPlan(tipo){
+  const f=fichaAct(),p=(f.misPlanes||[]).find(x=>x.trimestre===plSelAp),a=f.aprendices.find(x=>x.doc===SES.id);if(!p||!a)return;
+  if(tipo==='inicial'?!p.inicial:!p.final){alert('Ese plan todavía no está publicado.');return}
+  await crearPDF([{tipo,ficha:{numero:f.numero,nombre:f.nombre},plan:{proyecto:p.proyecto,fase:p.fase,instructor:p.instructor,version:p.version,borrador:false},
+    aprendiz:{nombre:nombrePlan(a),tipo:a.tipo,doc:a.doc},observaciones:p.observaciones||'',
+    actividades:p.actividades.map(x=>({numero:x.numero,rapTexto:x.rap_texto,materia:x.materia,actividad:x.actividad,fisica:x.fisica,digital:x.digital,concertada:x.concertada,final:x.final,entrego:x.entrego}))}],
+    'Plan de trabajo '+tipo.toUpperCase()+' - '+(a.apellidos+' '+a.nombre).trim()+' - '+p.trimestre+'.pdf');
 }
 
 /* ============ Arranque: recuperar sesión si ya había una ============ */
