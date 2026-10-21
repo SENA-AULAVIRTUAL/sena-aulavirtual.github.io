@@ -245,6 +245,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
 </div></div>
 
 <input type="file" id="fileJuicio" accept=".xls,.xlsx" style="display:none" onchange="leerArchivo(this)">
+<input type="file" id="guReemp" accept=".pdf,application/pdf" style="display:none" onchange="guiaReemplazada(this)">
 <input type="file" id="filePdfHor" accept=".pdf,application/pdf" style="display:none" onchange="leerPdfHorario(this)">
 <div id="toast" class="toast" role="status"></div>
 
@@ -274,6 +275,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
      <a onclick="showTab('horario',this)">🗓️ Horario</a>
      <a onclick="showTab('evid',this)">📁 Evidencias</a>
      <a onclick="showTab('plan',this)">📝 Plan de trabajo</a>
+     <a onclick="showTab('guias',this)">📚 Guías</a>
      <a onclick="showTab('lista',this)">👥 Aprendices <span id="badgeSol" class="dotc"></span></a>
    </div>
    <div class="menu" style="margin-top:14px" id="menuAprendiz">
@@ -282,6 +284,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
      <a onclick="showTab('horarioap',this)">🗓️ Mi horario</a>
      <a onclick="showTab('evidap',this)">📁 Mis evidencias</a>
      <a onclick="showTab('planap',this)">📝 Mi plan de trabajo</a>
+     <a onclick="showTab('guiasap',this)">📚 Mis guías</a>
    </div>
   </div>
 
@@ -350,6 +353,19 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
      <div class="box" id="plActs"></div>
      <div class="box" id="plSeg"></div>
    </div>
+   <div id="tab-guias" class="tab">
+     <div class="box"><h2>Guías de aprendizaje · Ficha <span class="fichaActiva"></span></h2>
+       <p class="muted" style="margin-top:4px">Sube la guía ya terminada en PDF. Los aprendices EN FORMACIÓN de la ficha la ven y la descargan, y puedes asociarla a las actividades del plan de trabajo.</p>
+       <div class="row" style="margin-top:10px;align-items:flex-end">
+         <div style="flex:2;min-width:200px"><div class="label" style="margin-top:0">Título de la guía</div><input id="guTitulo" class="input" style="text-align:left" maxlength="120" placeholder="Ej: Guía 1 - Fresadora CNC"></div>
+         <div><div class="label" style="margin-top:0">Trimestre</div><select id="guTriNuevo" class="input" style="width:auto;text-align:left" onchange="guTriNuevo=this.value"></select></div>
+       </div>
+       <div class="label">Archivo PDF (máximo 15 MB)</div>
+       <input type="file" id="guArchivo" class="input" style="text-align:left" accept=".pdf,application/pdf">
+       <button class="btn" id="btnSubirGuia" style="background:var(--dgreen)" onclick="subirGuia()">Subir guía</button>
+     </div>
+     <div class="box"><div class="row" style="justify-content:space-between;align-items:center"><h2>Guías subidas</h2><select id="guFiltro" class="input" style="width:auto;text-align:left" onchange="guFiltrar(this.value)" aria-label="Filtrar guías"></select></div><div id="guLista" style="margin-top:8px"></div></div>
+   </div>
    <div id="tab-lista" class="tab"><div class="box"><h2>Aprendices · Ficha <span class="fichaActiva"></span></h2>
 <div id="boxSolicitudes" style="margin-top:10px"></div>
 <p class="muted" style="margin-top:8px">Cada aprendiz crea su PIN desde el ingreso con «Primera vez» y tú lo apruebas aquí. Tras 5 intentos fallidos, su acceso se bloquea 15 minutos.</p><div id="listaCompleta" style="margin-top:10px"></div></div></div>
@@ -360,6 +376,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
    <div id="tab-horarioap" class="tab"><div class="box" id="miHorario"></div></div>
    <div id="tab-evidap" class="tab"><div class="box" id="misEvid"></div></div>
    <div id="tab-planap" class="tab"><div class="box" id="miPlan"></div></div>
+   <div id="tab-guiasap" class="tab"><div class="box" id="misGuias"></div></div>
   </div>
  </div>
 </div>
@@ -396,7 +413,7 @@ function prefSet(n){try{n?localStorage.setItem('sena_ficha_activa',n):localStora
 function fichaDesdeFila(r){
   return{numero:r.numero,nombre:r.nombre||'',codigo:r.codigo||'',jornada:r.jornada||'',estadoFicha:r.estado_ficha||'',
     inicio:r.inicio||'',fin:r.fin||'',modalidad:r.modalidad||'',centro:r.centro||'',reporte:r.reporte||'',
-    estructura:r.estructura||[],aprendices:[],juicios:{},asistencia:{},sesiones:{},excusas:[],horario:{},secciones:[],evidencias:[],driveCarpeta:r.drive_carpeta||'',driveScript:r.drive_script||'',planesT:{},misPlanes:[]};
+    estructura:r.estructura||[],aprendices:[],juicios:{},asistencia:{},sesiones:{},excusas:[],horario:{},secciones:[],evidencias:[],driveCarpeta:r.drive_carpeta||'',driveScript:r.drive_script||'',planesT:{},misPlanes:[],guias:[],misGuias:[]};
 }
 async function fetchAll(tabla,orden,cols){
   let out=[],desde=0;const paso=1000;   // Supabase entrega máximo 1000 filas por consulta
@@ -421,6 +438,7 @@ async function cargarInstructor(){
   const tr=await fetchAll('trimestres',['ficha','trimestre']);
   const hb=await fetchAll('horario_bloques',['ficha','trimestre','dia','hora_ini']);
   const sc=await fetchAll('secciones_trabajo',['ficha','orden']);
+  let gu=[];try{gu=await fetchAll('guias',['ficha','creado'])}catch(e){}
   let pl=[],pa=[],po=[],pe=[];
   try{
     pl=await fetchAll('planes',['ficha','trimestre']);
@@ -440,9 +458,10 @@ async function cargarInstructor(){
   ex.forEach(x=>{const f=nuevo.fichas[x.ficha];if(f)f.excusas.push({doc:x.doc,fecha:x.fecha,estado:x.estado,comentario:x.comentario||'',nombre_archivo:x.nombre_archivo||''})});
   sc.forEach(x=>{const f=nuevo.fichas[x.ficha];if(f)f.secciones.push({id:x.id,nombre:x.nombre,descripcion:x.descripcion||'',trimestre:x.trimestre||'',orden:x.orden||0,abierta:x.abierta!==false})});
   ev.forEach(x=>{const f=nuevo.fichas[x.ficha];if(f)f.evidencias.push({id:x.id,doc:x.doc,seccion_id:x.seccion_id,seccion_nombre:x.seccion_nombre||'',nombre:x.nombre||'',archivo:x.archivo||'',drive_url:x.drive_url||'',creado:x.creado||''})});
+  gu.forEach(x=>{const f=nuevo.fichas[x.ficha];if(f)f.guias.push({id:x.id,trimestre:x.trimestre||'',titulo:x.titulo,path:x.archivo_path,nombre:x.nombre_archivo||'',tamano:x.tamano||0,visible:!!x.visible,creado:x.creado||''})});
   const planDeAct={};
   pl.forEach(x=>{const f=nuevo.fichas[x.ficha];if(f)f.planesT[x.trimestre]={proyecto:x.proyecto_formativo||'',fase:x.fase||'',instructor:x.instructor_nombre||'',version:x.version||'V2.0',pubI:!!x.publicado_inicial,pubF:!!x.publicado_final,actividades:[],obs:{},entregas:{}}});
-  pa.forEach(x=>{const f=nuevo.fichas[x.ficha],p=f&&f.planesT[x.trimestre];if(!p)return;planDeAct[x.id]=p;p.actividades.push({id:x.id,orden:x.orden,rap_codigo:x.rap_codigo||'',rap_texto:x.rap_texto||'',materia:x.materia||'',actividad:x.actividad,fisica:!!x.entrega_fisica,digital:!!x.entrega_digital,concertada:x.fecha_concertada||'',final:x.fecha_final||'',seccion_id:x.seccion_id||''})});
+  pa.forEach(x=>{const f=nuevo.fichas[x.ficha],p=f&&f.planesT[x.trimestre];if(!p)return;planDeAct[x.id]=p;p.actividades.push({id:x.id,orden:x.orden,rap_codigo:x.rap_codigo||'',rap_texto:x.rap_texto||'',materia:x.materia||'',actividad:x.actividad,fisica:!!x.entrega_fisica,digital:!!x.entrega_digital,concertada:x.fecha_concertada||'',final:x.fecha_final||'',seccion_id:x.seccion_id||'',guia_id:x.guia_id||''})});
   po.forEach(x=>{const f=nuevo.fichas[x.ficha],p=f&&f.planesT[x.trimestre];if(p&&x.texto)p.obs[x.doc]=x.texto});
   pe.forEach(x=>{const p=planDeAct[x.actividad_id];if(p)(p.entregas[x.actividad_id]=p.entregas[x.actividad_id]||{})[x.doc]=x.entrego});
   DB=nuevo;
@@ -464,6 +483,7 @@ async function cargarAprendiz(d,f,p){
   (data.trimestres||[]).forEach(t=>{fi.horario[t.trimestre]={inicio:t.inicio||'',fin:t.fin||'',generado:'',bloques:[]}});
   (data.horario||[]).forEach(b=>{const h=fi.horario[b.trimestre];if(h)h.bloques.push({dia:b.dia,ini:b.ini,fin:b.fin,horas:b.horas,aula:b.aula||'',materia:b.materia||'',raps:b.raps||[],instructor:b.instructor||'',vinculacion:b.vinculacion||''})});
   try{const rp=await sb.rpc('aprendiz_plan',{p_doc:d,p_ficha:f,p_pin:p});if(!rp.error&&rp.data&&!rp.data.error)fi.misPlanes=rp.data.planes||[]}catch(e){}
+  try{const rg=await sb.rpc('aprendiz_guias',{p_doc:d,p_ficha:f,p_pin:p});if(!rg.error&&rg.data&&!rg.data.error)fi.misGuias=rg.data.guias||[]}catch(e){}
   DB={fichas:{[fi.numero]:fi}};
   return true;
 }
@@ -572,6 +592,7 @@ function showTab(id,el){
   if(el){el.parentElement.querySelectorAll('a').forEach(a=>a.classList.remove('active'));el.classList.add('active')}
   if(id==='lista'&&SES&&SES.rol==='instructor')refrescarSolicitudes().catch(()=>{});
   if(id==='evid'&&SES&&SES.rol==='instructor')refrescarEvidencias().catch(()=>{});
+  if(id==='guias'&&SES&&SES.rol==='instructor')renderGuiasIns();
 }
 
 /* ============ Lectura del Excel de SofiaPlus ============ */
@@ -778,7 +799,7 @@ function renderDetalle(doc){
 function verDetalle(doc){filtro='todos';renderDetalle(doc);abrir('modalDet')}
 
 /* ============ Render ============ */
-function renderAll(){renderFichas();renderJuicios();renderLista();renderAprendiz();renderAsistInstructor();renderAsistAprendiz();renderHorarioIns();renderHorarioAp();renderEvidIns();renderEvidAp();renderPlanIns();renderPlanAp()}
+function renderAll(){renderFichas();renderJuicios();renderLista();renderAprendiz();renderAsistInstructor();renderAsistAprendiz();renderHorarioIns();renderHorarioAp();renderEvidIns();renderEvidAp();renderPlanIns();renderPlanAp();renderGuiasIns();renderGuiasAp()}
 
 function renderFichas(){
   if(!SES||SES.rol!=='instructor')return;
@@ -2086,13 +2107,14 @@ function planRapsOpts(f,sel){
 }
 function renderPlanActs(f,p){
   const ed=plEdit?p.actividades.find(x=>x.id===plEdit):null;
-  const v=ed||{rap_codigo:'',materia:'',actividad:'',fisica:false,digital:true,concertada:'',final:'',seccion_id:''};
+  const v=ed||{rap_codigo:'',materia:'',actividad:'',fisica:false,digital:true,concertada:'',final:'',seccion_id:'',guia_id:''};
+  const guiasPlan=(f.guias||[]).filter(g=>!g.trimestre||g.trimestre===plSel);
   const secs=f.secciones.slice().sort((a,b)=>(a.orden-b.orden)||a.nombre.localeCompare(b.nombre,'es'));
   const lista=p.actividades.slice().sort((a,b)=>a.orden-b.orden).map((x,i,arr)=>{
-    const sec=secs.find(s=>s.id===x.seccion_id);
+    const sec=secs.find(s=>s.id===x.seccion_id),gd=(f.guias||[]).find(g=>g.id===x.guia_id);
     return `<div class="asrow"><div style="flex:1;min-width:240px"><b>${esc(x.orden)}. ${esc(x.actividad)}</b>
       <div class="muted">${esc(x.rap_codigo)} · ${esc(x.rap_texto)}${x.materia?' · '+esc(x.materia):''}</div>
-      <div class="muted">${[x.fisica?'Física':'',x.digital?'Digital':''].filter(Boolean).join(' y ')||'Sin forma de entrega'} · Inicio: ${esc(fechaDMA(x.concertada)||'sin fecha')} · Entrega: ${esc(fechaDMA(x.final)||'sin fecha')}${sec?' · Evidencias: '+esc(sec.nombre):''}</div></div>
+      <div class="muted">${[x.fisica?'Física':'',x.digital?'Digital':''].filter(Boolean).join(' y ')||'Sin forma de entrega'} · Inicio: ${esc(fechaDMA(x.concertada)||'sin fecha')} · Entrega: ${esc(fechaDMA(x.final)||'sin fecha')}${sec?' · Evidencias: '+esc(sec.nombre):''}${gd?' · Guía: '+esc(gd.titulo):''}</div></div>
       <div class="row">
         <button class="mini ghost" data-i="${esc(x.id)}" data-d="-1" onclick="moverActividad(this.dataset.i,this.dataset.d)" ${i===0?'disabled':''} aria-label="Subir">↑</button>
         <button class="mini ghost" data-i="${esc(x.id)}" data-d="1" onclick="moverActividad(this.dataset.i,this.dataset.d)" ${i===arr.length-1?'disabled':''} aria-label="Bajar">↓</button>
@@ -2116,6 +2138,9 @@ function renderPlanActs(f,p){
       <div class="label">Sección de evidencias ligada (opcional)</div>
       <select id="plSec" class="input" style="text-align:left"><option value="">Ninguna: marco la entrega a mano</option>${secs.map(s=>`<option value="${esc(s.id)}" ${s.id===v.seccion_id?'selected':''}>${esc(s.nombre)}</option>`).join('')}</select>
       <p class="hint" style="text-align:left">Si ligas una sección, la actividad cuenta como entregada cuando el aprendiz sube una evidencia en ella.</p>
+      <div class="label">Guía de aprendizaje asociada (opcional)</div>
+      <select id="plGuia" class="input" style="text-align:left"><option value="">Ninguna</option>${guiasPlan.map(g=>`<option value="${esc(g.id)}" ${g.id===v.guia_id?'selected':''}>${esc(g.titulo)}${g.trimestre?' · '+esc(g.trimestre):''}</option>`).join('')}</select>
+      <p class="hint" style="text-align:left">Los aprendices verán el botón «Ver guía» junto a la actividad. Sube las guías en el menú Guías.</p>
       <div class="row" style="margin-top:10px"><button class="btn auto" style="background:var(--dgreen)" onclick="guardarActividad()">${ed?'Guardar cambios':'Agregar actividad'}</button>${ed?'<button class="btn auto sec" onclick="cancelarEdicionAct()">Cancelar</button>':''}</div>
     </div>`+(lista||'<div class="empty" style="padding:14px">Todavía no hay actividades.</div>');
 }
@@ -2196,8 +2221,8 @@ async function guardarActividad(){
   if(fc&&ff&&fc>ff){alert('La fecha de inicio es posterior a la fecha de entrega.');return}
   const m=partes(rap);
   const fila={ficha:f.numero,trimestre:plSel,rap_codigo:m.cod,rap_texto:m.nom,materia:$('plMateria').value.trim()||null,actividad,
-    entrega_fisica:$('plFis').checked,entrega_digital:$('plDig').checked,fecha_concertada:fc||null,fecha_final:ff||null,seccion_id:$('plSec').value||null};
-  const local=id=>({id,orden:0,rap_codigo:fila.rap_codigo,rap_texto:fila.rap_texto,materia:fila.materia||'',actividad,fisica:fila.entrega_fisica,digital:fila.entrega_digital,concertada:fc,final:ff,seccion_id:fila.seccion_id||''});
+    entrega_fisica:$('plFis').checked,entrega_digital:$('plDig').checked,fecha_concertada:fc||null,fecha_final:ff||null,seccion_id:$('plSec').value||null,guia_id:$('plGuia').value||null};
+  const local=id=>({id,orden:0,rap_codigo:fila.rap_codigo,rap_texto:fila.rap_texto,materia:fila.materia||'',actividad,fisica:fila.entrega_fisica,digital:fila.entrega_digital,concertada:fc,final:ff,seccion_id:fila.seccion_id||'',guia_id:fila.guia_id||''});
   if(plEdit){
     const{error}=await sb.from('plan_actividades').update(fila).eq('id',plEdit);
     if(error){alert('No se pudo guardar: '+error.message);return}
@@ -2279,8 +2304,10 @@ function renderPlanAp(){
     const e=x.entrego,forma=[x.fisica?'Física':'',x.digital?'Digital':''].filter(Boolean).join(' y ')||'—';
     const fechas='Inicio: '+esc(fechaDMA(x.concertada)||'—')+(p.final?' · Entrega: '+esc(fechaDMA(x.final)||'—'):'');
     const pill=p.final?`<span class="pill ${e===true?'ok':e===false?'bad':'gris'}">${e===true?'Entregada':e===false?'No entregada':'Pendiente'}</span>`:'';
+    const gu=(f.misGuias||[]).find(y=>y.id===x.guia_id);
+    const gl=gu?' · <a href="'+esc(urlGuia(gu.path))+'" target="_blank" rel="noopener noreferrer" style="color:var(--dgreen);font-weight:700">Ver guía</a>':'';
     return `<div class="res"><div class="t"><b>${esc(x.numero)}. ${esc(x.actividad)}</b><div class="muted">${esc(x.rap_texto)}${x.materia?' · '+esc(x.materia):''}</div></div>${pill}
-      <div class="meta">Entrega: ${forma} · ${fechas}</div></div>`}).join('');
+      <div class="meta">Entrega: ${forma} · ${fechas}${gl}</div></div>`}).join('');
   el.innerHTML=`<h2>Mi plan de trabajo</h2>${chips}
     <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
       <div class="kpi"><span>Proyecto formativo</span><div style="font-weight:700;font-size:13px;margin-top:4px">${esc(p.proyecto||'—')}</div></div>
@@ -2303,6 +2330,122 @@ async function descargarMiPlan(tipo){
     aprendiz:{nombre:nombrePlan(a),tipo:a.tipo,doc:a.doc},observaciones:p.observaciones||'',
     actividades:p.actividades.map(x=>({numero:x.numero,rapTexto:x.rap_texto,materia:x.materia,actividad:x.actividad,fisica:x.fisica,digital:x.digital,concertada:x.concertada,final:x.final,entrego:x.entrego}))}],
     'Plan de trabajo '+tipo.toUpperCase()+' - '+(a.apellidos+' '+a.nombre).trim()+' - '+p.trimestre+'.pdf');
+}
+
+/* ============ Guías de aprendizaje (PDF) ============ */
+const MAX_GUIA=15*1024*1024;
+let guFiltro='__todas',guTriNuevo=null,guReempId=null,guSubiendo=false;
+
+function urlGuia(path,descarga,nombre){
+  try{return sb.storage.from('guias').getPublicUrl(path,descarga?{download:nombre||true}:undefined).data.publicUrl}catch(e){return '#'}
+}
+function triGuias(f){return [...new Set([...planTrims(f),...f.guias.map(g=>g.trimestre).filter(Boolean)])].sort().reverse()}
+function esPdf(file){return (file.type==='application/pdf'||/\.pdf$/i.test(file.name||''))}
+function nuevaRuta(f){
+  const id=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():String(Date.now())+Math.random().toString(16).slice(2);
+  return f.numero+'/'+id+'.pdf';
+}
+function actividadesConGuia(f,id){
+  let n=0;Object.values(f.planesT||{}).forEach(p=>p.actividades.forEach(a=>{if(a.guia_id===id)n++}));return n;
+}
+
+/* ---------- Instructor ---------- */
+function renderGuiasIns(){
+  if(!SES||SES.rol!=='instructor')return;
+  const f=fichaAct(),el=$('guLista');
+  if(!f){el.innerHTML='<div class="empty">Sube un juicio evaluativo para crear la ficha.</div>';$('guTriNuevo').innerHTML='';$('guFiltro').innerHTML='';return}
+  const ts=triGuias(f);
+  const def=guTriNuevo!==null?guTriNuevo:(plSel||ts[0]||'');
+  $('guTriNuevo').innerHTML='<option value="">Sin trimestre (general)</option>'+ts.map(t=>`<option value="${esc(t)}" ${t===def?'selected':''}>${esc(t)}</option>`).join('');
+  $('guFiltro').innerHTML='<option value="__todas">Todas las guías</option>'+ts.map(t=>`<option value="${esc(t)}" ${t===guFiltro?'selected':''}>${esc(t)}</option>`).join('')+`<option value="__general" ${guFiltro==='__general'?'selected':''}>Sin trimestre</option>`;
+  let lista=f.guias.slice().sort((a,b)=>String(b.creado).localeCompare(String(a.creado)));
+  if(guFiltro==='__general')lista=lista.filter(g=>!g.trimestre);
+  else if(guFiltro!=='__todas')lista=lista.filter(g=>g.trimestre===guFiltro);
+  el.innerHTML=lista.length?lista.map(g=>{
+    const n=actividadesConGuia(f,g.id);
+    return `<div class="asrow"><div style="flex:1;min-width:230px"><b>${esc(g.titulo)}</b> <span class="pill ${g.visible?'ok':'gris'}">${g.visible?'Visible para los aprendices':'Oculta'}</span>
+      <div class="muted">${g.trimestre?esc(g.trimestre)+' · ':''}${esc(g.nombre||'')} · ${esc(fmtTam(g.tamano||0))} · ${esc(fmtFechaHora(g.creado))}</div>
+      <div class="muted">${n?'Asociada a '+n+' actividad'+(n>1?'es':'')+' del plan de trabajo':'Sin asociar a actividades del plan'}</div></div>
+      <div class="row">
+        <a class="mini ghost" style="text-decoration:none" href="${esc(urlGuia(g.path))}" target="_blank" rel="noopener noreferrer">Ver</a>
+        <a class="mini ghost" style="text-decoration:none" href="${esc(urlGuia(g.path,true,g.nombre||'guia.pdf'))}" rel="noopener noreferrer">Descargar</a>
+        <button class="mini ghost" data-i="${esc(g.id)}" onclick="alternarGuia(this.dataset.i)">${g.visible?'Ocultar':'Mostrar'}</button>
+        <button class="mini ghost" data-i="${esc(g.id)}" onclick="reemplazarGuia(this.dataset.i)">Reemplazar PDF</button>
+        <button class="mini danger" data-i="${esc(g.id)}" onclick="borrarGuia(this.dataset.i)" aria-label="Borrar guía">🗑️</button></div></div>`}).join('')
+    :'<div class="empty" style="padding:14px">Todavía no hay guías en esta vista.</div>';
+}
+function guFiltrar(v){guFiltro=v;renderGuiasIns()}
+async function subirGuia(){
+  if(guSubiendo)return;
+  const f=fichaAct();if(!f)return;
+  const file=$('guArchivo').files[0],tri=$('guTriNuevo').value;
+  let titulo=$('guTitulo').value.trim();
+  if(!file){alert('Elige el PDF de la guía.');return}
+  if(!esPdf(file)){alert('El archivo debe ser un PDF.');return}
+  if(file.size===0){alert('El archivo está vacío.');return}
+  if(file.size>MAX_GUIA){alert('El PDF pesa más de 15 MB. Comprímelo y vuelve a intentarlo.');return}
+  if(!titulo)titulo=file.name.replace(/\.pdf$/i,'').trim()||'Guía de aprendizaje';
+  const btn=$('btnSubirGuia');guSubiendo=true;btn.disabled=true;btn.textContent='Subiendo...';
+  const path=nuevaRuta(f);
+  try{
+    const up=await sb.storage.from('guias').upload(path,file,{contentType:'application/pdf',cacheControl:'3600',upsert:false});
+    if(up.error)throw up.error;
+    const{data,error}=await sb.from('guias').insert({ficha:f.numero,trimestre:tri||null,titulo,archivo_path:path,nombre_archivo:file.name,tamano:file.size,visible:true}).select().single();
+    if(error){try{await sb.storage.from('guias').remove([path])}catch(e){}throw error}
+    f.guias.unshift({id:data.id,trimestre:tri,titulo,path,nombre:file.name,tamano:file.size,visible:true,creado:data.creado||new Date().toISOString()});
+    $('guTitulo').value='';$('guArchivo').value='';
+    toast('Guía subida: ya la ven los aprendices EN FORMACIÓN');
+  }catch(e){alert('No se pudo subir la guía: '+(e.message||e))}
+  finally{guSubiendo=false;btn.disabled=false;btn.textContent='Subir guía';renderGuiasIns();if(typeof renderPlanIns==='function')renderPlanIns()}
+}
+async function alternarGuia(id){
+  const f=fichaAct(),g=f&&f.guias.find(x=>x.id===id);if(!g)return;
+  const{error}=await sb.from('guias').update({visible:!g.visible}).eq('id',id);
+  if(error){alert('No se pudo cambiar: '+error.message);return}
+  g.visible=!g.visible;renderGuiasIns();toast(g.visible?'Guía visible para los aprendices':'Guía oculta');
+}
+function reemplazarGuia(id){guReempId=id;const i=$('guReemp');i.value='';i.click()}
+async function guiaReemplazada(inp){
+  const f=fichaAct(),g=f&&f.guias.find(x=>x.id===guReempId),file=inp.files&&inp.files[0];
+  if(!g||!file)return;
+  if(!esPdf(file)){alert('El archivo debe ser un PDF.');return}
+  if(file.size===0||file.size>MAX_GUIA){alert(file.size===0?'El archivo está vacío.':'El PDF pesa más de 15 MB.');return}
+  toast('Reemplazando...');
+  const path=nuevaRuta(f),viejo=g.path;
+  try{
+    const up=await sb.storage.from('guias').upload(path,file,{contentType:'application/pdf',cacheControl:'3600',upsert:false});
+    if(up.error)throw up.error;
+    const{error}=await sb.from('guias').update({archivo_path:path,nombre_archivo:file.name,tamano:file.size}).eq('id',g.id);
+    if(error){try{await sb.storage.from('guias').remove([path])}catch(e){}throw error}
+    try{await sb.storage.from('guias').remove([viejo])}catch(e){}
+    g.path=path;g.nombre=file.name;g.tamano=file.size;
+    renderGuiasIns();toast('PDF reemplazado. Los aprendices ven la versión nueva.');
+  }catch(e){alert('No se pudo reemplazar: '+(e.message||e))}
+}
+async function borrarGuia(id){
+  const f=fichaAct(),g=f&&f.guias.find(x=>x.id===id);if(!g)return;
+  const n=actividadesConGuia(f,id);
+  if(!confirm('¿Borrar la guía «'+g.titulo+'»?'+(n?'\n\nEstá asociada a '+n+' actividad'+(n>1?'es':'')+' del plan: quedarán sin guía.':'')+'\n\nLos aprendices dejarán de verla. No se puede deshacer.'))return;
+  const{error}=await sb.from('guias').delete().eq('id',id);
+  if(error){alert('No se pudo borrar: '+error.message);return}
+  try{await sb.storage.from('guias').remove([g.path])}catch(e){}
+  f.guias=f.guias.filter(x=>x.id!==id);
+  Object.values(f.planesT||{}).forEach(p=>p.actividades.forEach(a=>{if(a.guia_id===id)a.guia_id=''}));
+  renderGuiasIns();if(typeof renderPlanIns==='function')renderPlanIns();toast('Guía borrada');
+}
+
+/* ---------- Aprendiz ---------- */
+function renderGuiasAp(){
+  if(!SES||SES.rol!=='aprendiz')return;
+  const f=fichaAct(),el=$('misGuias');if(!f)return;
+  const gs=(f.misGuias||[]);
+  if(!gs.length){el.innerHTML='<h2>Mis guías de aprendizaje</h2><div class="empty">Tu instructor todavía no ha publicado guías.</div>';return}
+  const grupos={};gs.forEach(g=>{const k=g.trimestre||'';(grupos[k]=grupos[k]||[]).push(g)});
+  const claves=Object.keys(grupos).sort().reverse();
+  el.innerHTML='<h2>Mis guías de aprendizaje</h2>'+claves.map(k=>`<h2 style="font-size:15px;margin:14px 0 6px">${k?'Trimestre '+esc(k):'Guías generales'}</h2>`+grupos[k].map(g=>`
+    <div class="asrow"><div style="flex:1;min-width:200px"><b>${esc(g.titulo)}</b><div class="muted">Publicada el ${esc(fmtFechaHora(g.creado))}</div></div>
+      <div class="row"><a class="btn auto" style="background:var(--dgreen);text-decoration:none;padding:9px 16px" href="${esc(urlGuia(g.path))}" target="_blank" rel="noopener noreferrer">Ver guía</a>
+      <a class="btn auto sec" style="text-decoration:none;padding:9px 16px" href="${esc(urlGuia(g.path,true,g.nombre||'guia.pdf'))}" rel="noopener noreferrer">Descargar PDF</a></div></div>`).join('')).join('');
 }
 
 /* ============ Arranque: recuperar sesión si ya había una ============ */
