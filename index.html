@@ -245,6 +245,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
 </div></div>
 
 <input type="file" id="fileJuicio" accept=".xls,.xlsx" style="display:none" onchange="leerArchivo(this)">
+<input type="file" id="exFileEval" accept=".pdf,.doc,.docx,application/pdf" style="display:none" onchange="archivoEvalElegido(this)">
 <input type="file" id="guReemp" accept=".pdf,application/pdf" style="display:none" onchange="guiaReemplazada(this)">
 <input type="file" id="filePdfHor" accept=".pdf,application/pdf" style="display:none" onchange="leerPdfHorario(this)">
 <div id="toast" class="toast" role="status"></div>
@@ -276,6 +277,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
      <a onclick="showTab('evid',this)">📁 Evidencias</a>
      <a onclick="showTab('plan',this)">📝 Plan de trabajo</a>
      <a onclick="showTab('guias',this)">📚 Guías</a>
+     <a onclick="showTab('exam',this)">🧪 Exámenes</a>
      <a onclick="showTab('lista',this)">👥 Aprendices <span id="badgeSol" class="dotc"></span></a>
    </div>
    <div class="menu" style="margin-top:14px" id="menuAprendiz">
@@ -285,6 +287,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
      <a onclick="showTab('evidap',this)">📁 Mis evidencias</a>
      <a onclick="showTab('planap',this)">📝 Mi plan de trabajo</a>
      <a onclick="showTab('guiasap',this)">📚 Mis guías</a>
+     <a onclick="showTab('examap',this)">🧪 Exámenes</a>
    </div>
   </div>
 
@@ -366,6 +369,23 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
      </div>
      <div class="box"><div class="row" style="justify-content:space-between;align-items:center"><h2>Guías subidas</h2><select id="guFiltro" class="input" style="width:auto;text-align:left" onchange="guFiltrar(this.value)" aria-label="Filtrar guías"></select></div><div id="guLista" style="margin-top:8px"></div></div>
    </div>
+   <div id="tab-exam" class="tab">
+     <div class="box"><h2>Exámenes y talleres · Ficha <span class="fichaActiva"></span></h2>
+       <p class="muted" style="margin-top:4px">Sube el enunciado y el solucionario, define los criterios que calificas tú y arma el cuestionario. El cuestionario se califica solo al enviar; lo demás lo calificas tú. El tiempo de entrega lo puedes cambiar cuando quieras.</p>
+       <div class="row" style="margin-top:10px;align-items:flex-end">
+         <div style="flex:2;min-width:200px"><div class="label" style="margin-top:0">Título</div><input id="exNuevoTitulo" class="input" style="text-align:left" maxlength="150" placeholder="Ej: Examen 1 - Programación de fresadora CNC"></div>
+         <div><div class="label" style="margin-top:0">Tipo</div><select id="exNuevoTipo" class="input" style="width:auto"><option value="examen">Examen</option><option value="taller">Taller</option></select></div>
+         <button class="btn auto" style="background:var(--dgreen)" onclick="crearEvaluacion()">Crear</button>
+       </div>
+     </div>
+     <div class="box"><h2>Exámenes y talleres de la ficha</h2><div id="exLista" style="margin-top:8px"></div></div>
+     <div class="box" id="exDatos" style="display:none"></div>
+     <div class="box" id="exArchivos" style="display:none"></div>
+     <div class="box" id="exCrit" style="display:none"></div>
+     <div class="box" id="exPreg" style="display:none"></div>
+     <div class="box" id="exRes" style="display:none"></div>
+     <div class="box" id="exCalif" style="display:none"></div>
+   </div>
    <div id="tab-lista" class="tab"><div class="box"><h2>Aprendices · Ficha <span class="fichaActiva"></span></h2>
 <div id="boxSolicitudes" style="margin-top:10px"></div>
 <p class="muted" style="margin-top:8px">Cada aprendiz crea su PIN desde el ingreso con «Primera vez» y tú lo apruebas aquí. Tras 5 intentos fallidos, su acceso se bloquea 15 minutos.</p><div id="listaCompleta" style="margin-top:10px"></div></div></div>
@@ -377,6 +397,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
    <div id="tab-evidap" class="tab"><div class="box" id="misEvid"></div></div>
    <div id="tab-planap" class="tab"><div class="box" id="miPlan"></div></div>
    <div id="tab-guiasap" class="tab"><div class="box" id="misGuias"></div></div>
+   <div id="tab-examap" class="tab"><div class="box" id="exAp"></div></div>
   </div>
  </div>
 </div>
@@ -413,7 +434,7 @@ function prefSet(n){try{n?localStorage.setItem('sena_ficha_activa',n):localStora
 function fichaDesdeFila(r){
   return{numero:r.numero,nombre:r.nombre||'',codigo:r.codigo||'',jornada:r.jornada||'',estadoFicha:r.estado_ficha||'',
     inicio:r.inicio||'',fin:r.fin||'',modalidad:r.modalidad||'',centro:r.centro||'',reporte:r.reporte||'',
-    estructura:r.estructura||[],aprendices:[],juicios:{},asistencia:{},sesiones:{},excusas:[],horario:{},secciones:[],evidencias:[],driveCarpeta:r.drive_carpeta||'',driveScript:r.drive_script||'',planesT:{},misPlanes:[],guias:[],misGuias:[]};
+    estructura:r.estructura||[],aprendices:[],juicios:{},asistencia:{},sesiones:{},excusas:[],horario:{},secciones:[],evidencias:[],driveCarpeta:r.drive_carpeta||'',driveScript:r.drive_script||'',planesT:{},misPlanes:[],guias:[],misGuias:[],evals:[],misEvals:[],ahoraOffset:0};
 }
 async function fetchAll(tabla,orden,cols){
   let out=[],desde=0;const paso=1000;   // Supabase entrega máximo 1000 filas por consulta
@@ -439,6 +460,13 @@ async function cargarInstructor(){
   const hb=await fetchAll('horario_bloques',['ficha','trimestre','dia','hora_ini']);
   const sc=await fetchAll('secciones_trabajo',['ficha','orden']);
   let gu=[];try{gu=await fetchAll('guias',['ficha','creado'])}catch(e){}
+  let ev0=[],ec0=[],eq0=[],ei0=[];
+  try{
+    ev0=await fetchAll('evaluaciones',['ficha','creado']);
+    ec0=await fetchAll('eval_criterios',['evaluacion_id','orden']);
+    eq0=await fetchAll('eval_preguntas',['evaluacion_id','orden']);
+    ei0=await fetchAll('eval_intentos',['evaluacion_id','doc']);
+  }catch(e){}
   let pl=[],pa=[],po=[],pe=[];
   try{
     pl=await fetchAll('planes',['ficha','trimestre']);
@@ -459,6 +487,11 @@ async function cargarInstructor(){
   sc.forEach(x=>{const f=nuevo.fichas[x.ficha];if(f)f.secciones.push({id:x.id,nombre:x.nombre,descripcion:x.descripcion||'',trimestre:x.trimestre||'',orden:x.orden||0,abierta:x.abierta!==false})});
   ev.forEach(x=>{const f=nuevo.fichas[x.ficha];if(f)f.evidencias.push({id:x.id,doc:x.doc,seccion_id:x.seccion_id,seccion_nombre:x.seccion_nombre||'',nombre:x.nombre||'',archivo:x.archivo||'',drive_url:x.drive_url||'',creado:x.creado||''})});
   gu.forEach(x=>{const f=nuevo.fichas[x.ficha];if(f)f.guias.push({id:x.id,trimestre:x.trimestre||'',titulo:x.titulo,path:x.archivo_path,nombre:x.nombre_archivo||'',tamano:x.tamano||0,visible:!!x.visible,creado:x.creado||''})});
+  const evPorId={};
+  ev0.forEach(x=>{const f=nuevo.fichas[x.ficha];if(!f)return;const e={id:x.id,tipo:x.tipo,titulo:x.titulo,instrucciones:x.instrucciones||'',trimestre:x.trimestre||'',duracion:x.duracion_min||null,modo:x.cierre_modo||'tardia',abre:x.abre||null,cierra:x.cierra||null,estado:x.estado,escala:Number(x.escala),mostrar:x.mostrar_respuestas,seccion_id:x.seccion_id||'',enuPath:x.enunciado_path||'',enuNombre:x.enunciado_nombre||'',enuAntes:!!x.enunciado_antes,solPath:x.solucionario_path||'',solNombre:x.solucionario_nombre||'',solVisible:!!x.solucionario_visible,creado:x.creado||'',preguntas:[],criterios:[],intentos:[]};f.evals.push(e);evPorId[x.id]=e});
+  ec0.forEach(x=>{const e=evPorId[x.evaluacion_id];if(e)e.criterios.push({id:x.id,orden:x.orden,nombre:x.nombre,peso:Number(x.peso),descripcion:x.descripcion||''})});
+  eq0.forEach(x=>{const e=evPorId[x.evaluacion_id];if(e)e.preguntas.push({id:x.id,orden:x.orden,enunciado:x.enunciado,tipo:x.tipo,opciones:x.opciones||[],respuesta:x.respuesta||{},puntos:Number(x.puntos)})});
+  ei0.forEach(x=>{const e=evPorId[x.evaluacion_id];if(e)e.intentos.push({id:x.id,doc:x.doc,iniciado:x.iniciado,enviado:x.enviado,extra:x.extra_min||0,respuestas:x.respuestas||{},auto:x.auto||{},manual:x.manual||{},calificado:!!x.calificado})});
   const planDeAct={};
   pl.forEach(x=>{const f=nuevo.fichas[x.ficha];if(f)f.planesT[x.trimestre]={proyecto:x.proyecto_formativo||'',fase:x.fase||'',instructor:x.instructor_nombre||'',version:x.version||'V2.0',pubI:!!x.publicado_inicial,pubF:!!x.publicado_final,actividades:[],obs:{},entregas:{}}});
   pa.forEach(x=>{const f=nuevo.fichas[x.ficha],p=f&&f.planesT[x.trimestre];if(!p)return;planDeAct[x.id]=p;p.actividades.push({id:x.id,orden:x.orden,rap_codigo:x.rap_codigo||'',rap_texto:x.rap_texto||'',materia:x.materia||'',actividad:x.actividad,fisica:!!x.entrega_fisica,digital:!!x.entrega_digital,concertada:x.fecha_concertada||'',final:x.fecha_final||'',seccion_id:x.seccion_id||'',guia_id:x.guia_id||''})});
@@ -484,6 +517,7 @@ async function cargarAprendiz(d,f,p){
   (data.horario||[]).forEach(b=>{const h=fi.horario[b.trimestre];if(h)h.bloques.push({dia:b.dia,ini:b.ini,fin:b.fin,horas:b.horas,aula:b.aula||'',materia:b.materia||'',raps:b.raps||[],instructor:b.instructor||'',vinculacion:b.vinculacion||''})});
   try{const rp=await sb.rpc('aprendiz_plan',{p_doc:d,p_ficha:f,p_pin:p});if(!rp.error&&rp.data&&!rp.data.error)fi.misPlanes=rp.data.planes||[]}catch(e){}
   try{const rg=await sb.rpc('aprendiz_guias',{p_doc:d,p_ficha:f,p_pin:p});if(!rg.error&&rg.data&&!rg.data.error)fi.misGuias=rg.data.guias||[]}catch(e){}
+  try{const re=await sb.rpc('aprendiz_evaluaciones',{p_doc:d,p_ficha:f,p_pin:p});if(!re.error&&re.data&&!re.data.error){fi.misEvals=re.data.evaluaciones||[];fi.ahoraOffset=Date.parse(re.data.ahora)-Date.now()}}catch(e){}
   DB={fichas:{[fi.numero]:fi}};
   return true;
 }
@@ -593,6 +627,8 @@ function showTab(id,el){
   if(id==='lista'&&SES&&SES.rol==='instructor')refrescarSolicitudes().catch(()=>{});
   if(id==='evid'&&SES&&SES.rol==='instructor')refrescarEvidencias().catch(()=>{});
   if(id==='guias'&&SES&&SES.rol==='instructor')renderGuiasIns();
+  if(id==='exam'&&SES&&SES.rol==='instructor')refrescarIntentos().catch(()=>{});
+  if(id==='examap'&&SES&&SES.rol==='aprendiz'&&!exAct)refrescarExamAp().catch(()=>{});
 }
 
 /* ============ Lectura del Excel de SofiaPlus ============ */
@@ -799,7 +835,7 @@ function renderDetalle(doc){
 function verDetalle(doc){filtro='todos';renderDetalle(doc);abrir('modalDet')}
 
 /* ============ Render ============ */
-function renderAll(){renderFichas();renderJuicios();renderLista();renderAprendiz();renderAsistInstructor();renderAsistAprendiz();renderHorarioIns();renderHorarioAp();renderEvidIns();renderEvidAp();renderPlanIns();renderPlanAp();renderGuiasIns();renderGuiasAp()}
+function renderAll(){renderFichas();renderJuicios();renderLista();renderAprendiz();renderAsistInstructor();renderAsistAprendiz();renderHorarioIns();renderHorarioAp();renderEvidIns();renderEvidAp();renderPlanIns();renderPlanAp();renderGuiasIns();renderGuiasAp();renderExamIns();renderExamAp()}
 
 function renderFichas(){
   if(!SES||SES.rol!=='instructor')return;
@@ -2446,6 +2482,618 @@ function renderGuiasAp(){
     <div class="asrow"><div style="flex:1;min-width:200px"><b>${esc(g.titulo)}</b><div class="muted">Publicada el ${esc(fmtFechaHora(g.creado))}</div></div>
       <div class="row"><a class="btn auto" style="background:var(--dgreen);text-decoration:none;padding:9px 16px" href="${esc(urlGuia(g.path))}" target="_blank" rel="noopener noreferrer">Ver guía</a>
       <a class="btn auto sec" style="text-decoration:none;padding:9px 16px" href="${esc(urlGuia(g.path,true,g.nombre||'guia.pdf'))}" rel="noopener noreferrer">Descargar PDF</a></div></div>`).join('')).join('');
+}
+
+/* ============ Exámenes y talleres ============ */
+let exSel=null,exQEdit=null,exCal=null,exArchTipo=null,exAct=null,exVer=null;
+const MAX_EVALARCH=20*1024*1024;
+const TIPO_Q={opcion:'Opción múltiple',vf:'Verdadero / Falso',numerica:'Numérica',corta:'Texto corto (palabras clave)',abierta:'Abierta (la calificas tú)'};
+const EST_EVAL={borrador:['Borrador','gris'],publicado:['Publicado','ok'],cerrado:['Cerrado','pend']};
+const MSG_EX={no_disponible:'Esa evaluación ya no está disponible.',aun_no_abre:'Todavía no está abierta.',cerrada:'Esta evaluación ya está cerrada.',tiempo_agotado:'Se agotó el tiempo y ya no puedes enviar. Avisa a tu instructor.',no_activa:'Esta evaluación ya fue enviada o no se inició.',bloqueado:'Demasiados intentos fallidos. Espera 15 minutos.',no:'Tu sesión ya no es válida. Sal y vuelve a entrar.',novedad:'Tu estado actual no permite esta acción.',sin_resultado:'Todavía no hay resultado.'};
+
+function urlEval(path,descarga,nombre){
+  try{return sb.storage.from('evaluaciones').getPublicUrl(path,descarga?{download:nombre||true}:undefined).data.publicUrl}catch(e){return '#'}
+}
+function aLocalInput(iso){
+  if(!iso)return '';const d=new Date(iso);if(isNaN(d))return '';
+  const p=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes());
+}
+function deLocalInput(v){if(!v)return null;const d=new Date(v);return isNaN(d)?null:d.toISOString()}
+function numE(v){const n=Number(String(v==null?'':v).trim().replace(',','.'));return String(v==null?'':v).trim()===''||!isFinite(n)?NaN:n}
+const r2=n=>Math.round(Number(n)*100)/100;
+
+/* ---- cálculo de notas (misma lógica que la base de datos) ---- */
+function ptsPreg(i,q){
+  const m=(i.manual||{})[q.id];
+  if(m&&m.pts!==undefined&&m.pts!==null&&m.pts!=='')return Number(m.pts);
+  if(i.auto&&i.auto[q.id]!==undefined)return Number(i.auto[q.id]);
+  return null;
+}
+function totalesJS(e,i){
+  let pts=0,tot=0,apts=0,atot=0,pend=0;
+  e.preguntas.forEach(q=>{
+    tot+=Number(q.puntos);const v=ptsPreg(i,q);
+    if(q.tipo!=='abierta'){atot+=Number(q.puntos);apts+=Number((i.auto||{})[q.id]||0)}
+    if(v===null)pend++;else pts+=v;
+  });
+  e.criterios.forEach(c=>{
+    tot+=Number(c.peso);const m=(i.manual||{})[c.id];
+    if(m&&m.pts!==undefined&&m.pts!==null&&m.pts!=='')pts+=Number(m.pts);else pend++;
+  });
+  return{pts,tot,apts,atot,pend};
+}
+const notaJS=(e,t)=>t.tot>0?r2(t.pts/t.tot*e.escala):0;
+function limiteDe(e,i){return e.duracion&&i.iniciado?new Date(new Date(i.iniciado).getTime()+(Number(e.duracion)+Number(i.extra||0))*60000):null}
+function estadoIntento(e,i,ahora){
+  if(!i)return{t:'No ha iniciado',c:'gris'};
+  const lim=limiteDe(e,i);
+  if(i.enviado){
+    const tardia=lim&&new Date(i.enviado)>lim;
+    if(i.calificado)return{t:'Calificado'+(tardia?' · tardío':''),c:'ok',tardia};
+    return{t:'Enviado'+(tardia?' · tardío':''),c:tardia?'bad':'pend',tardia};
+  }
+  if(lim&&ahora>lim)return{t:'En curso · vencido',c:'bad',vencido:true};
+  return{t:'En curso',c:'pend'};
+}
+const evActivos=f=>f.aprendices.filter(a=>!inactivo(a)).sort((a,b)=>(a.apellidos+a.nombre).localeCompare(b.apellidos+b.nombre,'es'));
+const exDe=f=>(f.evals||[]).find(e=>e.id===exSel);
+
+/* ======================= INSTRUCTOR ======================= */
+function renderExamIns(){
+  if(!SES||SES.rol!=='instructor')return;
+  const f=fichaAct(),L=$('exLista');
+  const ocultar=()=>['exDatos','exArchivos','exCrit','exPreg','exRes','exCalif'].forEach(id=>{$(id).innerHTML='';$(id).style.display='none'});
+  if(!f){L.innerHTML='<div class="empty">Sube un juicio evaluativo para crear la ficha.</div>';ocultar();return}
+  const act=evActivos(f),docs=new Set(act.map(a=>a.doc));
+  const lista=(f.evals||[]).slice().sort((a,b)=>String(b.creado).localeCompare(String(a.creado)));
+  L.innerHTML=lista.length?lista.map(e=>{
+    const n=e.intentos.filter(i=>docs.has(i.doc)&&i.enviado).length,es=EST_EVAL[e.estado];
+    return `<div class="asrow" style="${e.id===exSel?'background:var(--soft2);border-radius:10px;padding:10px':''}"><div style="flex:1;min-width:220px"><b>${esc(e.titulo)}</b> <span class="pill gris">${e.tipo==='taller'?'Taller':'Examen'}</span> <span class="pill ${es[1]}">${es[0]}</span>
+      <div class="muted">${e.trimestre?esc(e.trimestre)+' · ':''}${e.duracion?esc(e.duracion)+' min':'Sin límite de tiempo'} · ${n} de ${act.length} han enviado</div></div>
+      <div class="row"><button class="mini" data-i="${esc(e.id)}" onclick="abrirEval(this.dataset.i)">${e.id===exSel?'Abierto':'Abrir'}</button>
+      <button class="mini danger" data-i="${esc(e.id)}" onclick="borrarEvaluacion(this.dataset.i)" aria-label="Borrar">🗑️</button></div></div>`}).join('')
+    :'<div class="empty" style="padding:14px">Todavía no hay exámenes ni talleres. Crea el primero arriba.</div>';
+  const e=exDe(f);
+  if(!e){exSel=null;ocultar();return}
+  renderExDatos(f,e);renderExArchivos(f,e);renderExCrit(f,e);renderExPreg(f,e);renderExRes(f,e);renderExCalif(f,e);
+}
+function abrirEval(id){exSel=id;exQEdit=null;exCal=null;renderExamIns();const d=$('exDatos');d.scrollIntoView&&d.scrollIntoView()}
+async function crearEvaluacion(){
+  const f=fichaAct();if(!f)return;
+  const titulo=$('exNuevoTitulo').value.trim(),tipo=$('exNuevoTipo').value;
+  if(!titulo){alert('Escribe el título.');return}
+  const{data,error}=await sb.from('evaluaciones').insert({ficha:f.numero,tipo,titulo,trimestre:plSel||null,duracion_min:tipo==='examen'?120:null}).select().single();
+  if(error){alert('No se pudo crear: '+error.message);return}
+  const e={id:data.id,tipo,titulo,instrucciones:'',trimestre:plSel||'',duracion:tipo==='examen'?120:null,modo:'tardia',abre:null,cierra:null,estado:'borrador',escala:5,mostrar:'al_calificar',seccion_id:'',
+    enuPath:'',enuNombre:'',enuAntes:false,solPath:'',solNombre:'',solVisible:false,creado:data.creado||new Date().toISOString(),preguntas:[],criterios:[],intentos:[]};
+  f.evals=f.evals||[];f.evals.unshift(e);
+  $('exNuevoTitulo').value='';exSel=e.id;exQEdit=null;exCal=null;
+  renderExamIns();toast('Creado como borrador. Completa los datos, los criterios y las preguntas.');
+}
+async function borrarEvaluacion(id){
+  const f=fichaAct(),e=f&&f.evals.find(x=>x.id===id);if(!e)return;
+  if(!confirm('¿Borrar «'+e.titulo+'» con sus preguntas, criterios y '+e.intentos.length+' entregas de aprendices? No se puede deshacer.'))return;
+  const{error}=await sb.from('evaluaciones').delete().eq('id',id);
+  if(error){alert('No se pudo borrar: '+error.message);return}
+  for(const p of [e.enuPath,e.solPath]){if(p){try{await sb.storage.from('evaluaciones').remove([p])}catch(x){}}}
+  f.evals=f.evals.filter(x=>x.id!==id);if(exSel===id)exSel=null;
+  renderExamIns();toast('Evaluación borrada');
+}
+
+/* ---- Datos y tiempo ---- */
+function renderExDatos(f,e){
+  const tris=planTrims(f),secs=f.secciones.slice().sort((a,b)=>(a.orden-b.orden)||a.nombre.localeCompare(b.nombre,'es'));
+  const es=EST_EVAL[e.estado];
+  const D=$('exDatos');D.style.display='block';
+  D.innerHTML=`<div class="row" style="justify-content:space-between"><h2>${esc(e.titulo)}</h2><span class="pill ${es[1]}">${es[0]}</span></div>
+    <div class="label">Título</div><input id="exTitulo" class="input" style="text-align:left" maxlength="150" value="${esc(e.titulo)}">
+    <div class="row" style="align-items:flex-end">
+      <div><div class="label">Tipo</div><select id="exTipoE" class="input" style="width:auto"><option value="examen" ${e.tipo==='examen'?'selected':''}>Examen</option><option value="taller" ${e.tipo==='taller'?'selected':''}>Taller</option></select></div>
+      <div><div class="label">Trimestre</div><select id="exTrim" class="input" style="width:auto;text-align:left"><option value="">Sin trimestre</option>${tris.map(t=>`<option value="${esc(t)}" ${t===e.trimestre?'selected':''}>${esc(t)}</option>`).join('')}</select></div>
+      <div><div class="label">Escala de la nota (máximo)</div><input id="exEscala" class="input" style="width:90px" inputmode="decimal" value="${esc(e.escala)}"></div>
+    </div>
+    <div class="label">Instrucciones para el aprendiz</div><textarea id="exInstr" class="input" style="text-align:left;min-height:70px;font-weight:600" maxlength="1500">${esc(e.instrucciones)}</textarea>
+    <h2 style="font-size:15px;margin:14px 0 4px">Tiempo (lo puedes cambiar cuando quieras)</h2>
+    <div class="row" style="align-items:flex-end">
+      <div><div class="label" style="margin-top:0">Duración en minutos</div><input id="exDur" class="input" style="width:110px" inputmode="numeric" value="${e.duracion?esc(e.duracion):''}" placeholder="Sin límite"></div>
+      <div style="flex:1;min-width:230px"><div class="label" style="margin-top:0">Si el tiempo se vence</div><select id="exModo" class="input" style="text-align:left"><option value="tardia" ${e.modo==='tardia'?'selected':''}>Recibir la entrega y marcarla como tardía</option><option value="bloquear" ${e.modo==='bloquear'?'selected':''}>Bloquear el envío (tú decides si la recibes)</option></select></div>
+    </div>
+    <div class="row" style="align-items:flex-end">
+      <div><div class="label">Se puede iniciar desde</div><input type="datetime-local" id="exAbre" class="input" style="width:auto" value="${esc(aLocalInput(e.abre))}"></div>
+      <div><div class="label">Se puede iniciar hasta</div><input type="datetime-local" id="exCierra" class="input" style="width:auto" value="${esc(aLocalInput(e.cierra))}"></div>
+    </div>
+    <p class="hint" style="text-align:left">El tiempo corre desde que el aprendiz pulsa «Iniciar». Si cambias la duración, vale también para quienes ya están presentando.</p>
+    <div class="row" style="align-items:flex-end">
+      <div style="flex:1;min-width:220px"><div class="label">Archivos del aprendiz (sección de evidencias)</div><select id="exSec" class="input" style="text-align:left"><option value="">Ninguna</option>${secs.map(s=>`<option value="${esc(s.id)}" ${s.id===e.seccion_id?'selected':''}>${esc(s.nombre)}</option>`).join('')}</select></div>
+      <div style="flex:1;min-width:220px"><div class="label">Respuestas correctas visibles</div><select id="exMostrar" class="input" style="text-align:left"><option value="nunca" ${e.mostrar==='nunca'?'selected':''}>Nunca</option><option value="al_enviar" ${e.mostrar==='al_enviar'?'selected':''}>Apenas el aprendiz envía</option><option value="al_calificar" ${e.mostrar==='al_calificar'?'selected':''}>Cuando yo califique</option></select></div>
+    </div>
+    <label style="font-size:13px;display:block;margin-top:10px"><input type="checkbox" id="exAntes" ${e.enuAntes?'checked':''}> El aprendiz puede ver el enunciado antes de iniciar</label>
+    <div class="row" style="margin-top:14px">
+      <button class="btn auto" style="background:var(--dgreen)" onclick="guardarDatosEval()">Guardar datos</button>
+      ${e.estado==='borrador'?'<button class="btn auto sec" onclick="cambiarEstadoEval(\'publicado\')">Publicar a los aprendices</button>':''}
+      ${e.estado==='publicado'?'<button class="btn auto sec" onclick="cambiarEstadoEval(\'cerrado\')">Cerrar evaluación</button>':''}
+      ${e.estado==='cerrado'?'<button class="btn auto sec" onclick="cambiarEstadoEval(\'publicado\')">Reabrir</button>':''}
+      ${e.estado!=='borrador'&&!e.intentos.length?'<button class="mini ghost" onclick="cambiarEstadoEval(\'borrador\')">Volver a borrador</button>':''}
+    </div>`;
+}
+async function guardarDatosEval(){
+  const f=fichaAct(),e=f&&exDe(f);if(!e)return;
+  const titulo=$('exTitulo').value.trim();if(!titulo){alert('El título no puede quedar vacío.');return}
+  const durTxt=$('exDur').value.trim();let dur=null;
+  if(durTxt!==''){dur=Math.round(numE(durTxt));if(!(dur>0)||dur>1440){alert('La duración debe ser un número de minutos entre 1 y 1440, o vacío si no hay límite.');return}}
+  const escala=numE($('exEscala').value);if(!(escala>0)){alert('La escala de la nota debe ser un número mayor que cero.');return}
+  const abre=deLocalInput($('exAbre').value),cierra=deLocalInput($('exCierra').value);
+  if(abre&&cierra&&abre>=cierra){alert('La hora de apertura debe ser anterior a la de cierre.');return}
+  const d={titulo,tipo:$('exTipoE').value,trimestre:$('exTrim').value||null,instrucciones:$('exInstr').value.trim()||null,duracion_min:dur,cierre_modo:$('exModo').value,abre,cierra,
+    escala,mostrar_respuestas:$('exMostrar').value,seccion_id:$('exSec').value||null,enunciado_antes:$('exAntes').checked};
+  const{error}=await sb.from('evaluaciones').update(d).eq('id',e.id);
+  if(error){alert('No se pudo guardar: '+error.message);return}
+  Object.assign(e,{titulo,tipo:d.tipo,trimestre:d.trimestre||'',instrucciones:d.instrucciones||'',duracion:dur,modo:d.cierre_modo,abre,cierra,escala,mostrar:d.mostrar_respuestas,seccion_id:d.seccion_id||'',enuAntes:d.enunciado_antes});
+  renderExamIns();toast('Datos guardados');
+}
+async function cambiarEstadoEval(estado){
+  const f=fichaAct(),e=f&&exDe(f);if(!e)return;
+  if(estado==='publicado'&&e.estado==='borrador'){
+    if(!e.preguntas.length&&!e.criterios.length){alert('Agrega al menos una pregunta o un criterio antes de publicar.');return}
+    if(!confirm('¿Publicar «'+e.titulo+'»? Los aprendices EN FORMACIÓN de la ficha podrán verlo'+(e.enuAntes?'':' e iniciarlo (el enunciado se muestra al iniciar)')+'.'))return;
+  }
+  if(estado==='cerrado'&&!confirm('¿Cerrar la evaluación? Nadie nuevo podrá iniciarla. Quienes ya la iniciaron la pueden terminar.'))return;
+  const{error}=await sb.from('evaluaciones').update({estado}).eq('id',e.id);
+  if(error){alert('No se pudo cambiar: '+error.message);return}
+  e.estado=estado;renderExamIns();toast('Estado: '+EST_EVAL[estado][0]);
+}
+
+/* ---- Archivos: enunciado y solucionario ---- */
+function renderExArchivos(f,e){
+  const fila=(clave,titulo,path,nombre,extra)=>`<div class="asrow"><div style="flex:1;min-width:200px"><b>${titulo}</b>
+      <div class="muted">${path?esc(nombre||'archivo'):'Sin archivo'}</div>${extra||''}</div>
+      <div class="row">${path?`<a class="mini ghost" style="text-decoration:none" href="${esc(urlEval(path))}" target="_blank" rel="noopener noreferrer">Ver</a>`:''}
+      <button class="mini" onclick="pedirArchivoEval('${clave}')">${path?'Reemplazar':'Subir (PDF o Word)'}</button>
+      ${path?`<button class="mini danger" onclick="quitarArchivoEval('${clave}')" aria-label="Quitar">🗑️</button>`:''}</div></div>`;
+  const A=$('exArchivos');A.style.display='block';
+  A.innerHTML='<h2>Enunciado y solucionario</h2><p class="muted" style="margin:4px 0 8px">PDF o Word, máximo 20 MB. El solucionario queda oculto hasta que lo liberes.</p>'
+    +fila('enu','Enunciado (lo que ve el aprendiz)',e.enuPath,e.enuNombre,'')
+    +fila('sol','Solucionario (examen resuelto)',e.solPath,e.solNombre,e.solPath?`<label style="font-size:13px"><input type="checkbox" ${e.solVisible?'checked':''} onchange="alternarSolVisible(this.checked)"> Visible para los aprendices</label>`:'');
+}
+function pedirArchivoEval(tipo){exArchTipo=tipo;const i=$('exFileEval');i.value='';i.click()}
+async function archivoEvalElegido(inp){
+  const f=fichaAct(),e=f&&exDe(f),file=inp.files&&inp.files[0];if(!e||!file)return;
+  const m=String(file.name).toLowerCase().match(/\.(pdf|docx|doc)$/);
+  if(!m){alert('El archivo debe ser PDF o Word (.pdf, .docx, .doc).');return}
+  if(file.size===0||file.size>MAX_EVALARCH){alert(file.size===0?'El archivo está vacío.':'El archivo pesa más de 20 MB.');return}
+  const tipoMime={pdf:'application/pdf',doc:'application/msword',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}[m[1]];
+  const id=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():String(Date.now())+Math.random().toString(16).slice(2);
+  const path=f.numero+'/'+id+'.'+m[1],esEnu=exArchTipo==='enu';
+  const viejo=esEnu?e.enuPath:e.solPath;
+  toast('Subiendo archivo...');
+  try{
+    const up=await sb.storage.from('evaluaciones').upload(path,file,{contentType:tipoMime,cacheControl:'3600',upsert:false});
+    if(up.error)throw up.error;
+    const cambio=esEnu?{enunciado_path:path,enunciado_nombre:file.name}:{solucionario_path:path,solucionario_nombre:file.name,solucionario_visible:false};
+    const{error}=await sb.from('evaluaciones').update(cambio).eq('id',e.id);
+    if(error){try{await sb.storage.from('evaluaciones').remove([path])}catch(x){}throw error}
+    if(viejo){try{await sb.storage.from('evaluaciones').remove([viejo])}catch(x){}}
+    if(esEnu){e.enuPath=path;e.enuNombre=file.name}else{e.solPath=path;e.solNombre=file.name;e.solVisible=false}
+    renderExamIns();toast(esEnu?'Enunciado subido':'Solucionario subido (oculto para los aprendices)');
+  }catch(err){alert('No se pudo subir: '+(err.message||err))}
+}
+async function quitarArchivoEval(tipo){
+  const f=fichaAct(),e=f&&exDe(f);if(!e)return;
+  const esEnu=tipo==='enu',path=esEnu?e.enuPath:e.solPath;if(!path)return;
+  if(!confirm('¿Quitar el '+(esEnu?'enunciado':'solucionario')+'?'))return;
+  const cambio=esEnu?{enunciado_path:null,enunciado_nombre:null}:{solucionario_path:null,solucionario_nombre:null,solucionario_visible:false};
+  const{error}=await sb.from('evaluaciones').update(cambio).eq('id',e.id);
+  if(error){alert('No se pudo quitar: '+error.message);return}
+  try{await sb.storage.from('evaluaciones').remove([path])}catch(x){}
+  if(esEnu){e.enuPath='';e.enuNombre=''}else{e.solPath='';e.solNombre='';e.solVisible=false}
+  renderExamIns();
+}
+async function alternarSolVisible(v){
+  const f=fichaAct(),e=f&&exDe(f);if(!e)return;
+  const{error}=await sb.from('evaluaciones').update({solucionario_visible:!!v}).eq('id',e.id);
+  if(error){alert('No se pudo cambiar: '+error.message);renderExamIns();return}
+  e.solVisible=!!v;renderExamIns();toast(v?'Solucionario visible para los aprendices':'Solucionario oculto');
+}
+
+/* ---- Criterios (los que calificas mirando archivos) ---- */
+function renderExCrit(f,e){
+  const sumC=e.criterios.reduce((n,c)=>n+Number(c.peso),0),sumP=e.preguntas.reduce((n,q)=>n+Number(q.puntos),0);
+  const C=$('exCrit');C.style.display='block';
+  C.innerHTML=`<h2>Criterios que calificas tú</h2>
+    <p class="muted" style="margin:4px 0 8px">Para la parte práctica: diseño, plano, programación... Cada uno vale un peso (puntos o porcentaje). Tú abres los archivos del aprendiz y pones cuánto obtuvo.</p>
+    ${e.criterios.slice().sort((a,b)=>a.orden-b.orden).map(c=>`<div class="asrow"><div style="flex:1"><b>${esc(c.nombre)}</b> <span class="pill gris">${r2(c.peso)} pts</span><div class="muted">${esc(c.descripcion||'')}</div></div><button class="mini danger" data-i="${esc(c.id)}" onclick="borrarCriterio(this.dataset.i)" aria-label="Borrar">🗑️</button></div>`).join('')||'<div class="empty" style="padding:10px">Sin criterios todavía.</div>'}
+    <div class="row" style="margin-top:10px;align-items:flex-end">
+      <div style="flex:2;min-width:180px"><div class="label" style="margin-top:0">Criterio</div><input id="exCritNombre" class="input" style="text-align:left" maxlength="120" placeholder="Ej: Programación"></div>
+      <div><div class="label" style="margin-top:0">Peso</div><input id="exCritPeso" class="input" style="width:90px" inputmode="decimal" placeholder="40"></div>
+      <div style="flex:2;min-width:180px"><div class="label" style="margin-top:0">Descripción (opcional)</div><input id="exCritDesc" class="input" style="text-align:left" maxlength="200"></div>
+      <button class="btn auto" style="background:var(--dgreen)" onclick="agregarCriterio()">Agregar</button>
+    </div>
+    <p class="muted" style="margin-top:8px">Total de la evaluación: <b>${r2(sumC+sumP)}</b> puntos (criterios ${r2(sumC)} + cuestionario ${r2(sumP)}).</p>`;
+}
+async function agregarCriterio(){
+  const f=fichaAct(),e=f&&exDe(f);if(!e)return;
+  const nombre=$('exCritNombre').value.trim(),peso=numE($('exCritPeso').value);
+  if(!nombre){alert('Escribe el nombre del criterio.');return}
+  if(!(peso>=0)){alert('El peso debe ser un número (por ejemplo 40).');return}
+  const orden=e.criterios.reduce((n,c)=>Math.max(n,c.orden),0)+1,descripcion=$('exCritDesc').value.trim()||null;
+  const{data,error}=await sb.from('eval_criterios').insert({evaluacion_id:e.id,orden,nombre,peso,descripcion}).select().single();
+  if(error){alert('No se pudo agregar: '+error.message);return}
+  e.criterios.push({id:data.id,orden,nombre,peso,descripcion:descripcion||''});
+  renderExamIns();
+}
+async function borrarCriterio(id){
+  const f=fichaAct(),e=f&&exDe(f),c=e&&e.criterios.find(x=>x.id===id);if(!c)return;
+  if(!confirm('¿Borrar el criterio «'+c.nombre+'»? Se pierden los puntajes que ya hayas puesto en él.'))return;
+  const{error}=await sb.from('eval_criterios').delete().eq('id',id);
+  if(error){alert('No se pudo borrar: '+error.message);return}
+  e.criterios=e.criterios.filter(x=>x.id!==id);renderExamIns();
+}
+
+/* ---- Preguntas del cuestionario ---- */
+function formatoRespuestaOk(q){
+  const r=q.respuesta||{};
+  if(q.tipo==='opcion')return 'Opción '+(Number(r.indice)+1)+(q.opciones[r.indice]?': '+q.opciones[r.indice]:'');
+  if(q.tipo==='vf')return r.valor?'Verdadero':'Falso';
+  if(q.tipo==='numerica')return r.valor+(r.tolerancia?' (±'+r.tolerancia+')':'');
+  if(q.tipo==='corta')return 'Palabras clave: '+(r.palabras||[]).join(', ')+' · mínimo '+(r.minimo||1);
+  return 'Abierta: la calificas tú';
+}
+function renderExPreg(f,e){
+  const q=exQEdit?e.preguntas.find(x=>x.id===exQEdit):null;
+  const t=q?q.tipo:'opcion',r=q?(q.respuesta||{}):{};
+  const P=$('exPreg');P.style.display='block';
+  P.innerHTML=`<h2>Cuestionario</h2>
+    <p class="muted" style="margin:4px 0 8px">Las de opción, verdadero/falso, numérica y texto corto se califican solas al enviar. Las abiertas las calificas tú.</p>
+    ${e.preguntas.slice().sort((a,b)=>a.orden-b.orden).map((x,i)=>`<div class="asrow"><div style="flex:1;min-width:220px"><b>${i+1}. ${esc(x.enunciado)}</b> <span class="pill gris">${esc(TIPO_Q[x.tipo]||x.tipo)}</span> <span class="pill ok">${r2(x.puntos)} pts</span>
+      <div class="muted">${esc(formatoRespuestaOk(x))}</div></div>
+      <div class="row"><button class="mini ghost" data-i="${esc(x.id)}" onclick="editarPregunta(this.dataset.i)">Editar</button><button class="mini danger" data-i="${esc(x.id)}" onclick="borrarPregunta(this.dataset.i)" aria-label="Borrar">🗑️</button></div></div>`).join('')||'<div class="empty" style="padding:10px">Sin preguntas todavía.</div>'}
+    <div class="box" style="background:var(--soft);margin:10px 0 0">
+      <b>${q?'Editando la pregunta':'Nueva pregunta'}</b>
+      <div class="label">Enunciado</div><textarea id="exQEnun" class="input" style="text-align:left;min-height:56px;font-weight:600" maxlength="600">${esc(q?q.enunciado:'')}</textarea>
+      <div class="row" style="align-items:flex-end">
+        <div style="flex:1;min-width:200px"><div class="label">Tipo</div><select id="exQTipo" class="input" style="text-align:left" onchange="exQTipoCambio()">${Object.keys(TIPO_Q).map(k=>`<option value="${k}" ${k===t?'selected':''}>${TIPO_Q[k]}</option>`).join('')}</select></div>
+        <div><div class="label">Puntos</div><input id="exQPuntos" class="input" style="width:90px" inputmode="decimal" value="${q?esc(q.puntos):'1'}"></div>
+      </div>
+      <div id="exQ_opcion" style="display:${t==='opcion'?'block':'none'}"><div class="label">Opciones (una por línea)</div><textarea id="exQOpc" class="input" style="text-align:left;min-height:70px;font-weight:600">${esc(q&&q.tipo==='opcion'?q.opciones.join('\n'):'')}</textarea>
+        <div class="label">La opción correcta es la número</div><input id="exQOpcOk" class="input" style="width:90px" inputmode="numeric" value="${q&&q.tipo==='opcion'?esc(Number(r.indice)+1):'1'}"></div>
+      <div id="exQ_vf" style="display:${t==='vf'?'block':'none'}"><div class="label">La respuesta correcta es</div><select id="exQVf" class="input" style="width:auto"><option value="true" ${r.valor!==false?'selected':''}>Verdadero</option><option value="false" ${r.valor===false?'selected':''}>Falso</option></select></div>
+      <div id="exQ_numerica" style="display:${t==='numerica'?'block':'none'}"><div class="row"><div><div class="label">Valor correcto</div><input id="exQNum" class="input" style="width:120px" inputmode="decimal" value="${q&&q.tipo==='numerica'?esc(r.valor):''}"></div>
+        <div><div class="label">Tolerancia (±)</div><input id="exQTol" class="input" style="width:100px" inputmode="decimal" value="${q&&q.tipo==='numerica'?esc(r.tolerancia||0):'0'}"></div></div></div>
+      <div id="exQ_corta" style="display:${t==='corta'?'block':'none'}"><div class="label">Palabras clave aceptadas (separadas por coma)</div><input id="exQPal" class="input" style="text-align:left" value="${q&&q.tipo==='corta'?esc((r.palabras||[]).join(', ')):''}" placeholder="Ej: pocket, vaciado, contour">
+        <div class="label">Cuántas debe mencionar para el puntaje completo</div><input id="exQMin" class="input" style="width:90px" inputmode="numeric" value="${q&&q.tipo==='corta'?esc(r.minimo||1):'1'}">
+        <p class="hint" style="text-align:left">Ignora tildes y mayúsculas. Si menciona menos, recibe puntaje parcial. Siempre puedes corregir la nota a mano.</p></div>
+      <div class="row" style="margin-top:10px"><button class="btn auto" style="background:var(--dgreen)" onclick="guardarPregunta()">${q?'Guardar cambios':'Agregar pregunta'}</button>${q?'<button class="btn auto sec" onclick="cancelarEdicionPreg()">Cancelar</button>':''}</div>
+    </div>`;
+}
+function exQTipoCambio(){const t=$('exQTipo').value;['opcion','vf','numerica','corta'].forEach(k=>{$('exQ_'+k).style.display=k===t?'block':'none'})}
+function editarPregunta(id){exQEdit=id;renderExamIns();const p=$('exPreg');p.scrollIntoView&&p.scrollIntoView()}
+function cancelarEdicionPreg(){exQEdit=null;renderExamIns()}
+async function guardarPregunta(){
+  const f=fichaAct(),e=f&&exDe(f);if(!e)return;
+  const enun=$('exQEnun').value.trim(),tipo=$('exQTipo').value,puntos=numE($('exQPuntos').value);
+  if(!enun){alert('Escribe el enunciado de la pregunta.');return}
+  if(!(puntos>=0)){alert('Los puntos deben ser un número.');return}
+  let opciones=[],respuesta={};
+  if(tipo==='opcion'){
+    opciones=$('exQOpc').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    const ok=Math.round(numE($('exQOpcOk').value));
+    if(opciones.length<2){alert('Escribe al menos dos opciones, una por línea.');return}
+    if(!(ok>=1&&ok<=opciones.length)){alert('La opción correcta debe ser un número entre 1 y '+opciones.length+'.');return}
+    respuesta={indice:ok-1};
+  }else if(tipo==='vf'){respuesta={valor:$('exQVf').value==='true'}}
+  else if(tipo==='numerica'){
+    const v=numE($('exQNum').value),tol=numE($('exQTol').value||'0');
+    if(!isFinite(v)){alert('Escribe el valor numérico correcto.');return}
+    if(!(tol>=0)){alert('La tolerancia debe ser un número igual o mayor que cero.');return}
+    respuesta={valor:v,tolerancia:tol};
+  }else if(tipo==='corta'){
+    const pal=$('exQPal').value.split(',').map(s=>s.trim()).filter(Boolean);
+    if(!pal.length){alert('Escribe al menos una palabra clave.');return}
+    const min=Math.round(numE($('exQMin').value||'1'));
+    if(!(min>=1&&min<=pal.length)){alert('El mínimo debe estar entre 1 y '+pal.length+'.');return}
+    respuesta={palabras:pal,minimo:min};
+  }
+  const fila={evaluacion_id:e.id,enunciado:enun,tipo,opciones,respuesta,puntos};
+  if(exQEdit){
+    const{error}=await sb.from('eval_preguntas').update(fila).eq('id',exQEdit);
+    if(error){alert('No se pudo guardar: '+error.message);return}
+    Object.assign(e.preguntas.find(x=>x.id===exQEdit),{enunciado:enun,tipo,opciones,respuesta,puntos});
+    exQEdit=null;toast(e.intentos.some(i=>i.enviado)?'Pregunta actualizada. Pulsa «Recalcular automáticas» para aplicar el cambio a lo ya enviado.':'Pregunta actualizada');
+  }else{
+    fila.orden=e.preguntas.reduce((n,q)=>Math.max(n,q.orden),0)+1;
+    const{data,error}=await sb.from('eval_preguntas').insert(fila).select().single();
+    if(error){alert('No se pudo agregar: '+error.message);return}
+    e.preguntas.push({id:data.id,orden:fila.orden,enunciado:enun,tipo,opciones,respuesta,puntos});toast('Pregunta agregada');
+  }
+  renderExamIns();
+}
+async function borrarPregunta(id){
+  const f=fichaAct(),e=f&&exDe(f),q=e&&e.preguntas.find(x=>x.id===id);if(!q)return;
+  if(!confirm('¿Borrar la pregunta? Cambia el total de puntos de la evaluación.'))return;
+  const{error}=await sb.from('eval_preguntas').delete().eq('id',id);
+  if(error){alert('No se pudo borrar: '+error.message);return}
+  e.preguntas=e.preguntas.filter(x=>x.id!==id);if(exQEdit===id)exQEdit=null;renderExamIns();
+}
+
+/* ---- Resultados y tiempo por aprendiz ---- */
+function renderExRes(f,e){
+  const act=evActivos(f),ahora=new Date();
+  const filas=act.map(a=>{
+    const i=e.intentos.find(x=>x.doc===a.doc),es=estadoIntento(e,i,ahora);
+    let tiempo='—',nota='—',auto='—';
+    if(i){
+      const lim=limiteDe(e,i);
+      tiempo=lim?(i.enviado?'Entregó '+esc(fmtFechaHora(i.enviado)):'Límite '+esc(fmtFechaHora(lim))):'Sin límite';
+      if(i.extra)tiempo+=' <span class="pill gris">+'+esc(i.extra)+' min</span>';
+      const t=totalesJS(e,i);
+      if(i.enviado){auto=r2(t.apts)+' / '+r2(t.atot);nota=i.calificado?'<b>'+notaJS(e,t)+'</b> / '+r2(e.escala):'<span class="muted">pendiente ('+t.pend+')</span>'}
+    }
+    return `<tr><td style="min-width:160px"><b>${esc(a.apellidos)}</b> ${esc(a.nombre)}</td><td><span class="pill ${es.c}">${esc(es.t)}</span></td><td class="muted">${tiempo}</td><td>${auto}</td><td>${nota}</td>
+      <td style="white-space:nowrap">${i&&i.enviado?`<button class="mini" data-d="${esc(a.doc)}" onclick="abrirCalificar(this.dataset.d)">${i.calificado?'Revisar':'Calificar'}</button> `:''}
+      ${i&&!i.enviado?`<button class="mini ghost" data-d="${esc(a.doc)}" onclick="extraIntento(this.dataset.d)">± Tiempo</button> `:''}
+      ${i&&!i.enviado&&es.vencido?`<button class="mini danger" data-i="${esc(i.id)}" onclick="recibirIntento(this.dataset.i)">Recibir entrega</button>`:''}</td></tr>`}).join('');
+  const env=e.intentos.filter(i=>i.enviado&&act.some(a=>a.doc===i.doc)).length;
+  const R=$('exRes');R.style.display='block';
+  R.innerHTML=`<div class="row" style="justify-content:space-between"><h2>Resultados · ${env} de ${act.length} han enviado</h2>
+    <div class="row"><button class="mini ghost" onclick="ampliarTodos()">Ampliar tiempo a todos</button><button class="mini ghost" onclick="regrabarAuto()">Recalcular automáticas</button><button class="mini ghost" onclick="copiarNotas()">Copiar notas</button><button class="mini ghost" onclick="refrescarIntentos(true)">↻ Actualizar</button></div></div>
+    <div class="tblwrap" style="margin-top:8px"><table class="tbl"><thead><tr><th>Aprendiz</th><th>Estado</th><th>Tiempo</th><th>Cuestionario auto</th><th>Nota</th><th></th></tr></thead><tbody>${filas||'<tr><td colspan=6 class=muted>No hay aprendices EN FORMACIÓN.</td></tr>'}</tbody></table></div>`;
+}
+async function refrescarIntentos(avisar){
+  const f=fichaAct();if(!f)return;
+  const rows=await fetchAll('eval_intentos',['ficha','doc']);
+  (f.evals||[]).forEach(e=>{e.intentos=[]});
+  rows.forEach(x=>{const e=(f.evals||[]).find(y=>y.id===x.evaluacion_id);if(e)e.intentos.push({id:x.id,doc:x.doc,iniciado:x.iniciado,enviado:x.enviado,extra:x.extra_min||0,respuestas:x.respuestas||{},auto:x.auto||{},manual:x.manual||{},calificado:!!x.calificado})});
+  renderExamIns();if(avisar===true)toast('Resultados actualizados');
+}
+async function ampliarTodos(){
+  const f=fichaAct(),e=f&&exDe(f);if(!e)return;
+  if(!e.duracion){alert('Esta evaluación no tiene límite de tiempo. Pon una duración en «Datos» para poder ampliarla.');return}
+  const n=Math.round(numE(prompt('¿Cuántos minutos agregas para TODOS? (puedes usar un número negativo para reducir)','30')));
+  if(!isFinite(n)||n===0)return;
+  const nueva=e.duracion+n;if(nueva<1||nueva>1440){alert('La duración resultante debe estar entre 1 y 1440 minutos.');return}
+  const{error}=await sb.from('evaluaciones').update({duracion_min:nueva}).eq('id',e.id);
+  if(error){alert('No se pudo cambiar: '+error.message);return}
+  e.duracion=nueva;renderExamIns();toast('Duración ahora: '+nueva+' minutos (vale para todos)');
+}
+async function extraIntento(doc){
+  const f=fichaAct(),e=f&&exDe(f),i=e&&e.intentos.find(x=>x.doc===doc),a=f&&f.aprendices.find(x=>x.doc===doc);if(!i||!a)return;
+  if(!e.duracion){alert('Esta evaluación no tiene límite de tiempo.');return}
+  const n=Math.round(numE(prompt('Minutos adicionales para '+nombrePlan(a)+' (ahora tiene '+(i.extra||0)+' extra). Escribe el total extra que debe tener:',String((i.extra||0)+15))));
+  if(!isFinite(n))return;
+  if(e.duracion+n<1){alert('Eso dejaría la duración en cero o menos.');return}
+  const{error}=await sb.from('eval_intentos').update({extra_min:n}).eq('id',i.id);
+  if(error){alert('No se pudo cambiar: '+error.message);return}
+  i.extra=n;renderExamIns();toast('Tiempo extra de '+nombrePlan(a)+': '+n+' min');
+}
+async function recibirIntento(id){
+  const f=fichaAct(),e=f&&exDe(f);if(!e)return;
+  if(!confirm('¿Recibir la entrega con las respuestas que alcanzó a guardar? Se calificará la parte automática.'))return;
+  const{error}=await sb.rpc('eval_recibir',{p_intento:id});
+  if(error){alert('No se pudo recibir: '+error.message);return}
+  await refrescarIntentos();toast('Entrega recibida');
+}
+async function regrabarAuto(){
+  const f=fichaAct(),e=f&&exDe(f);if(!e)return;
+  if(!confirm('¿Recalcular la parte automática de todo lo enviado con las respuestas correctas actuales? Tus puntajes manuales no cambian.'))return;
+  const{error}=await sb.rpc('eval_regrabar',{p_eval:e.id});
+  if(error){alert('No se pudo recalcular: '+error.message);return}
+  await refrescarIntentos();toast('Notas automáticas recalculadas');
+}
+function copiarNotas(){
+  const f=fichaAct(),e=f&&exDe(f);if(!e)return;
+  const t=evActivos(f).map(a=>{
+    const i=e.intentos.find(x=>x.doc===a.doc);let nota='';
+    if(i&&i.enviado&&i.calificado)nota=String(notaJS(e,totalesJS(e,i))).replace('.',',');
+    return [a.doc,(a.apellidos+' '+a.nombre).trim(),i?(i.enviado?(i.calificado?'Calificado':'Enviado'):'En curso'):'No presentó',nota].join('\t');
+  }).join('\n');
+  (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast('Notas copiadas: pégalas en Excel')).catch(()=>alert('Notas:\n'+t));
+}
+
+/* ---- Calificar a un aprendiz ---- */
+function abrirCalificar(doc){exCal=doc;renderExamIns();const c=$('exCalif');c.scrollIntoView&&c.scrollIntoView()}
+function formatoRespuestaAp(q,v){
+  if(v===undefined||v===null||v==='')return '(sin respuesta)';
+  if(q.tipo==='opcion')return 'Opción '+(Number(v)+1)+(q.opciones[Number(v)]?': '+q.opciones[Number(v)]:'');
+  if(q.tipo==='vf')return v===true?'Verdadero':'Falso';
+  return String(v);
+}
+function renderExCalif(f,e){
+  const C=$('exCalif');
+  const a=exCal&&f.aprendices.find(x=>x.doc===exCal),i=a&&e.intentos.find(x=>x.doc===exCal);
+  if(!a||!i||!i.enviado){C.innerHTML='';C.style.display='none';return}
+  const t=totalesJS(e,i),es=estadoIntento(e,i,new Date());
+  const evid=e.seccion_id?f.evidencias.filter(x=>x.doc===a.doc&&x.seccion_id===e.seccion_id):[];
+  const fila=(id,titulo,max,detalle,pts,com,auto)=>`<div class="asrow" style="align-items:flex-start"><div style="flex:1;min-width:240px"><b>${titulo}</b> <span class="pill gris">máx. ${r2(max)}</span>${detalle}</div>
+      <div class="row" style="align-items:flex-end"><div><div class="label" style="margin:0">Puntos</div><input id="cal_${esc(id)}" class="input" style="width:80px;padding:8px" inputmode="decimal" value="${pts===null?'':esc(pts)}" placeholder="${auto===null?'':esc(r2(auto))}" oninput="exCalLive()"></div>
+      <div style="min-width:180px"><div class="label" style="margin:0">Comentario</div><input id="calc_${esc(id)}" class="input" style="text-align:left;padding:8px" maxlength="300" value="${esc(com||'')}"></div></div></div>`;
+  const m=id=>(i.manual||{})[id]||{};
+  C.style.display='block';
+  C.innerHTML=`<div class="row" style="justify-content:space-between"><h2>Calificar a ${esc(nombrePlan(a))}</h2><div class="row"><span class="pill ${es.c}">${esc(es.t)}</span><button class="mini ghost" onclick="cerrarCalificar()">Cerrar</button></div></div>
+    <p class="muted" style="margin:4px 0">Entregó: ${esc(fmtFechaHora(i.enviado))}${e.duracion?' · Límite: '+esc(fmtFechaHora(limiteDe(e,i))):''}</p>
+    <div class="kpis"><div class="kpi"><b id="exCalNota">${notaJS(e,t)}</b><span>nota actual (de ${r2(e.escala)})</span></div><div class="kpi"><b id="exCalPts">${r2(t.pts)}</b><span>de ${r2(t.tot)} puntos</span></div><div class="kpi"><b id="exCalPend">${t.pend}</b><span>sin puntaje todavía</span></div></div>
+    ${e.seccion_id?`<h2 style="font-size:15px;margin:12px 0 6px">Archivos que subió</h2>${evid.length?evid.map(x=>`<div class="asrow"><div><b>${esc(x.nombre)}</b><div class="muted">${esc(x.archivo)} · ${esc(fmtFechaHora(x.creado))}</div></div>${/^https:\/\/(drive|docs)\.google\.com\//.test(x.drive_url)?`<a class="mini ghost" style="text-decoration:none" href="${esc(x.drive_url)}" target="_blank" rel="noopener noreferrer">Abrir en Drive</a>`:''}</div>`).join(''):'<div class="muted">No ha subido archivos en la sección de esta evaluación.</div>'}`:''}
+    ${e.criterios.length?'<h2 style="font-size:15px;margin:14px 0 6px">Criterios</h2>'+e.criterios.slice().sort((x,y)=>x.orden-y.orden).map(c=>fila(c.id,esc(c.nombre),c.peso,c.descripcion?'<div class="muted">'+esc(c.descripcion)+'</div>':'',m(c.id).pts===undefined?null:m(c.id).pts,m(c.id).comentario,null)).join(''):''}
+    ${e.preguntas.length?'<h2 style="font-size:15px;margin:14px 0 6px">Cuestionario</h2>'+e.preguntas.slice().sort((x,y)=>x.orden-y.orden).map((q,k)=>{
+      const auto=q.tipo==='abierta'?null:Number((i.auto||{})[q.id]||0);
+      return fila(q.id,(k+1)+'. '+esc(q.enunciado),q.puntos,
+        `<div style="margin-top:4px"><span class="muted">Respondió:</span> ${esc(formatoRespuestaAp(q,(i.respuestas||{})[q.id]))}</div><div class="muted">Correcta: ${esc(formatoRespuestaOk(q))}${auto!==null?' · Automático: '+r2(auto)+' pts':''}</div>`,
+        m(q.id).pts===undefined?null:m(q.id).pts,m(q.id).comentario,auto)}).join(''):''}
+    <p class="hint" style="text-align:left">Los puntos automáticos aparecen en gris dentro de la casilla. Escribe un número para cambiarlos.</p>
+    <div class="row" style="margin-top:12px">
+      <button class="btn auto" style="background:var(--dgreen)" onclick="guardarCalificacion('calificar')">Guardar y marcar como calificado</button>
+      <button class="btn auto sec" onclick="guardarCalificacion('guardar')">Guardar sin publicar la nota</button>
+      ${i.calificado?'<button class="mini danger" onclick="guardarCalificacion(\'quitar\')">Quitar calificación</button>':''}
+    </div>`;
+}
+function cerrarCalificar(){exCal=null;renderExamIns()}
+function recogerManual(e,i){
+  const manual={};
+  const items=e.criterios.map(c=>({id:c.id,max:Number(c.peso),nom:c.nombre})).concat(e.preguntas.map(q=>({id:q.id,max:Number(q.puntos),nom:q.enunciado})));
+  for(const it of items){
+    const ptsT=($('cal_'+it.id).value||'').trim(),com=($('calc_'+it.id).value||'').trim(),o={};
+    if(ptsT!==''){
+      const v=numE(ptsT);
+      if(!(v>=0&&v<=it.max)){alert('«'+it.nom.slice(0,50)+'»: los puntos deben estar entre 0 y '+r2(it.max)+'.');return null}
+      o.pts=v;
+    }
+    if(com)o.comentario=com;
+    if(Object.keys(o).length)manual[it.id]=o;
+  }
+  return manual;
+}
+function exCalLive(){
+  const f=fichaAct(),e=f&&exDe(f),i=e&&e.intentos.find(x=>x.doc===exCal);if(!i)return;
+  const items=e.criterios.map(c=>c.id).concat(e.preguntas.map(q=>q.id)),manual={};
+  items.forEach(id=>{const v=numE($('cal_'+id).value);if(isFinite(v))manual[id]={pts:v}});
+  const t=totalesJS(e,{...i,manual});
+  $('exCalNota').textContent=String(notaJS(e,t));$('exCalPts').textContent=String(r2(t.pts));$('exCalPend').textContent=String(t.pend);
+}
+async function guardarCalificacion(modo){
+  const f=fichaAct(),e=f&&exDe(f),i=e&&e.intentos.find(x=>x.doc===exCal);if(!i)return;
+  let manual=i.manual,calificado=i.calificado;
+  if(modo!=='quitar'){manual=recogerManual(e,i);if(manual===null)return}
+  if(modo==='calificar')calificado=true;
+  if(modo==='quitar'){if(!confirm('¿Quitar la calificación? El aprendiz dejará de ver su nota.'))return;calificado=false}
+  const{error}=await sb.from('eval_intentos').update({manual,calificado,calificado_en:calificado?new Date().toISOString():null}).eq('id',i.id);
+  if(error){alert('No se pudo guardar: '+error.message);return}
+  i.manual=manual;i.calificado=calificado;
+  renderExamIns();toast(modo==='calificar'?'Calificado: el aprendiz ya ve su nota':modo==='quitar'?'Calificación retirada':'Calificación guardada (sin publicar)');
+}
+
+/* ======================= APRENDIZ ======================= */
+function estadoEvalAp(ev,ahora){
+  const it=ev.intento;
+  if(it&&it.enviado)return it.calificado?['Calificado','ok']:['Enviado','pend'];
+  if(it)return['En curso','pend'];
+  if(ev.estado==='cerrado')return['Cerrado','gris'];
+  if(ev.abre&&ahora<Date.parse(ev.abre))return['Aún no abre','gris'];
+  if(ev.cierra&&ahora>Date.parse(ev.cierra))return['Cerrado','gris'];
+  return['Disponible','ok'];
+}
+function renderExamAp(){
+  if(!SES||SES.rol!=='aprendiz')return;
+  const f=fichaAct(),el=$('exAp');if(!f)return;
+  if(exAct){renderExamenActivo(f,el);return}
+  if(exVer){el.innerHTML=exVer;return}
+  const evs=f.misEvals||[];
+  if(!evs.length){el.innerHTML='<h2>Exámenes y talleres</h2><div class="empty">Tu instructor todavía no ha publicado exámenes ni talleres.</div>';return}
+  const ahora=Date.now()+(f.ahoraOffset||0);
+  el.innerHTML='<h2>Exámenes y talleres</h2>'+evs.map(ev=>{
+    const es=estadoEvalAp(ev,ahora),it=ev.intento;
+    let botones='';
+    if(ev.enunciado_path)botones+=`<a class="mini ghost" style="text-decoration:none" href="${esc(urlEval(ev.enunciado_path))}" target="_blank" rel="noopener noreferrer">Ver enunciado</a> <a class="mini ghost" style="text-decoration:none" href="${esc(urlEval(ev.enunciado_path,true,ev.enunciado_nombre||'enunciado'))}" rel="noopener noreferrer">Descargar</a> `;
+    if(es[0]==='Disponible')botones+=`<button class="btn auto" style="background:var(--dgreen);padding:9px 16px" data-i="${esc(ev.id)}" onclick="iniciarExamen(this.dataset.i)">Iniciar</button>`;
+    if(es[0]==='En curso')botones+=`<button class="btn auto" style="background:var(--dgreen);padding:9px 16px" data-i="${esc(ev.id)}" onclick="iniciarExamen(this.dataset.i)">Continuar</button>`;
+    if(it&&it.enviado)botones+=`<button class="mini" data-i="${esc(ev.id)}" onclick="verResultadoExamen(this.dataset.i)">Ver mi resultado</button> `;
+    if(ev.solucionario_path)botones+=`<a class="mini ghost" style="text-decoration:none" href="${esc(urlEval(ev.solucionario_path))}" target="_blank" rel="noopener noreferrer">Ver solucionario</a>`;
+    let res='';
+    if(it&&it.enviado){
+      res=`<div class="meta">Parte automática del cuestionario: <b>${r2(it.auto_pts)} de ${r2(it.auto_total)}</b> puntos${it.tardia?' · <b style="color:var(--bad-tx)">entrega tardía</b>':''}${it.calificado?' · <b>Nota: '+esc(it.nota)+' / '+esc(r2(ev.escala))+'</b>':' · La nota final aparece cuando tu instructor termine de calificar.'}</div>`;
+    }
+    const info=[ev.duracion_min?ev.duracion_min+' min':'Sin límite de tiempo',ev.abre?'Abre: '+fmtFechaHora(ev.abre):'',ev.cierra?'Cierra: '+fmtFechaHora(ev.cierra):'',ev.seccion?'Archivos en: '+ev.seccion:''].filter(Boolean).join(' · ');
+    return `<div class="asrow" style="align-items:flex-start"><div style="flex:1;min-width:230px"><b>${esc(ev.titulo)}</b> <span class="pill gris">${ev.tipo==='taller'?'Taller':'Examen'}</span> <span class="pill ${es[1]}">${es[0]}</span>
+      <div class="muted">${esc(ev.trimestre?ev.trimestre+' · ':'')}${esc(info)}</div>${ev.instrucciones?`<div class="muted" style="margin-top:4px">${esc(ev.instrucciones)}</div>`:''}${res}</div><div class="row">${botones}</div></div>`}).join('');
+}
+async function iniciarExamen(id){
+  const f=fichaAct(),ses=ssGet(),ev=(f.misEvals||[]).find(x=>x.id===id);if(!ev)return;
+  if(!ses){alert('Tu sesión expiró. Sal y vuelve a entrar.');return}
+  if(!ev.intento&&!confirm('Vas a iniciar «'+ev.titulo+'».\n\n'+(ev.duracion_min?'Tendrás '+ev.duracion_min+' minutos desde este momento.':'No tiene límite de tiempo.')+'\n\n¿Empezar ahora?'))return;
+  const{data,error}=await sb.rpc('eval_iniciar',{p_doc:SES.id,p_ficha:SES.ficha,p_pin:ses.p,p_eval:id});
+  if(error){alert('No se pudo iniciar: '+error.message);return}
+  if(!data||data.error){alert(MSG_EX[data&&data.error]||'No se pudo iniciar.');return}
+  if(data.enviado){await recargarAprendiz();toast('Esta evaluación ya fue enviada');return}
+  exAct={id,ev,preguntas:data.preguntas||[],respuestas:data.respuestas||{},limite:data.limite,off:Date.parse(data.ahora)-Date.now(),enunciado:data.enunciado_path,enunciadoNombre:data.enunciado_nombre,modo:ev.cierre_modo,enviando:false};
+  clearInterval(exAct.tm);clearInterval(exAct.guard);
+  exAct.tm=setInterval(exTick,1000);exAct.guard=setInterval(exGuardarSilencioso,30000);
+  renderExamAp();exTick();
+  if(typeof showTab==='function')showTab('examap',document.querySelector&&null);
+}
+async function recargarAprendiz(){const ses=ssGet();try{await cargarAprendiz(SES.id,SES.ficha,ses.p)}catch(e){}renderAll()}
+function exTick(){
+  const el=$('exTimer');if(!el||!exAct)return;
+  if(!exAct.limite){el.textContent='Sin límite de tiempo';return}
+  const rest=Date.parse(exAct.limite)-(Date.now()+exAct.off);
+  if(rest>0){
+    const s=Math.floor(rest/1000),p=n=>String(n).padStart(2,'0');
+    el.textContent='Tiempo restante: '+p(Math.floor(s/3600))+':'+p(Math.floor(s%3600/60))+':'+p(s%60);
+    el.style.color=rest<300000?'var(--bad-tx)':'';
+  }else{
+    el.textContent=exAct.modo==='bloquear'?'Tiempo agotado: ya no puedes enviar. Avisa a tu instructor.':'Tiempo vencido: si envías ahora, la entrega se marcará como tardía.';
+    el.style.color='var(--bad-tx)';
+  }
+}
+async function exGuardarSilencioso(){
+  if(!exAct||exAct.enviando)return;
+  const ses=ssGet();if(!ses)return;
+  try{
+    const{data}=await sb.rpc('eval_guardar',{p_doc:SES.id,p_ficha:SES.ficha,p_pin:ses.p,p_eval:exAct.id,p_respuestas:exAct.respuestas});
+    if(data&&data.ok&&data.limite!==undefined){exAct.limite=data.limite;if(data.ahora)exAct.off=Date.parse(data.ahora)-Date.now()}
+  }catch(e){}
+}
+function exResp(id,v){if(exAct)exAct.respuestas[id]=v}
+function renderExamenActivo(f,el){
+  const a=exAct,ev=a.ev;
+  const campo=q=>{
+    const v=a.respuestas[q.id];
+    if(q.tipo==='opcion')return q.opciones.map((o,k)=>`<label style="display:block;padding:6px 0;font-size:14px"><input type="radio" name="q_${esc(q.id)}" ${v===k?'checked':''} onchange="exResp('${esc(q.id)}',${k})"> ${esc(o)}</label>`).join('');
+    if(q.tipo==='vf')return `<label style="display:inline-block;padding:6px 14px 6px 0;font-size:14px"><input type="radio" name="q_${esc(q.id)}" ${v===true?'checked':''} onchange="exResp('${esc(q.id)}',true)"> Verdadero</label><label style="display:inline-block;padding:6px 0;font-size:14px"><input type="radio" name="q_${esc(q.id)}" ${v===false?'checked':''} onchange="exResp('${esc(q.id)}',false)"> Falso</label>`;
+    if(q.tipo==='numerica')return `<input class="input" style="width:160px;text-align:left" inputmode="decimal" value="${esc(v==null?'':v)}" oninput="exResp('${esc(q.id)}',this.value)" placeholder="Escribe el número" aria-label="Respuesta">`;
+    return `<textarea class="input" style="text-align:left;min-height:80px;font-weight:600" oninput="exResp('${esc(q.id)}',this.value)" aria-label="Respuesta">${esc(v==null?'':v)}</textarea>`;
+  };
+  el.innerHTML=`<div class="row" style="justify-content:space-between;align-items:center"><h2>${esc(ev.titulo)}</h2><span id="exTimer" class="pill pend" style="font-size:13px"></span></div>
+    ${ev.instrucciones?`<p class="muted" style="margin:6px 0">${esc(ev.instrucciones)}</p>`:''}
+    <div class="row" style="margin:8px 0">${a.enunciado?`<a class="btn auto" style="background:var(--dgreen);text-decoration:none;padding:9px 16px" href="${esc(urlEval(a.enunciado))}" target="_blank" rel="noopener noreferrer">Abrir enunciado</a><a class="btn auto sec" style="text-decoration:none;padding:9px 16px" href="${esc(urlEval(a.enunciado,true,a.enunciadoNombre||'enunciado'))}" rel="noopener noreferrer">Descargar</a>`:''}</div>
+    ${ev.seccion?`<div class="warn" style="margin:8px 0">Tus archivos (diseños, programas, planos) los subes en <b>Mis evidencias</b>, sección <b>${esc(ev.seccion)}</b>. <button class="mini" style="margin-left:6px" onclick="irEvidencias()">Ir a Mis evidencias</button></div>`:''}
+    ${a.preguntas.length?'<h2 style="font-size:15px;margin:12px 0 4px">Cuestionario</h2>'+a.preguntas.map((q,k)=>`<div class="box" style="background:var(--soft);margin:8px 0"><b>${k+1}. ${esc(q.enunciado)}</b> <span class="pill gris">${r2(q.puntos)} pts</span><div style="margin-top:6px">${campo(q)}</div></div>`).join(''):'<p class="muted">Esta evaluación no tiene cuestionario: entrega solo archivos.</p>'}
+    <div class="row" style="margin-top:12px"><button class="btn auto" style="background:var(--dgreen)" onclick="enviarExamen()" ${a.enviando?'disabled':''}>${a.enviando?'Enviando...':'Enviar'}</button><button class="btn auto sec" onclick="guardarAvanceExamen()">Guardar avance</button><button class="mini ghost" onclick="salirExamen()">Volver a la lista</button></div>
+    <p class="hint" style="text-align:left">Tu avance se guarda solo cada 30 segundos. Si cierras la página, vuelve a entrar y pulsa «Continuar»: el tiempo sigue corriendo.</p>`;
+}
+function irEvidencias(){const a=Array.from(document.querySelectorAll('#menuAprendiz a')).find(x=>/evidencias/i.test(x.textContent));showTab('evidap',a||null)}
+function salirExamen(){if(!exAct)return;clearInterval(exAct.tm);clearInterval(exAct.guard);exGuardarSilencioso();exAct=null;renderExamAp()}
+async function guardarAvanceExamen(){
+  const ses=ssGet();if(!exAct||!ses)return;
+  const{data,error}=await sb.rpc('eval_guardar',{p_doc:SES.id,p_ficha:SES.ficha,p_pin:ses.p,p_eval:exAct.id,p_respuestas:exAct.respuestas});
+  if(error||!data||data.error){alert(MSG_EX[data&&data.error]||'No se pudo guardar el avance. Revisa tu conexión.');return}
+  if(data.limite!==undefined)exAct.limite=data.limite;
+  toast('Avance guardado');
+}
+async function enviarExamen(){
+  const ses=ssGet();if(!exAct||!ses||exAct.enviando)return;
+  const sin=exAct.preguntas.filter(q=>{const v=exAct.respuestas[q.id];return v===undefined||v===null||v===''}).length;
+  if(!confirm('¿Enviar tu '+(exAct.ev.tipo==='taller'?'taller':'examen')+' ahora?'+(sin?'\n\nTienes '+sin+' pregunta'+(sin>1?'s':'')+' sin responder.':'')+'\n\nDespués de enviar no podrás cambiar tus respuestas.'))return;
+  exAct.enviando=true;renderExamAp();exTick();
+  try{
+    const{data,error}=await sb.rpc('eval_enviar',{p_doc:SES.id,p_ficha:SES.ficha,p_pin:ses.p,p_eval:exAct.id,p_respuestas:exAct.respuestas});
+    if(error)throw error;
+    if(!data||data.error){exAct.enviando=false;renderExamAp();exTick();alert(MSG_EX[data&&data.error]||'No se pudo enviar.');return}
+    clearInterval(exAct.tm);clearInterval(exAct.guard);exAct=null;
+    await recargarAprendiz();
+    alert('Enviado.'+(data.auto_total>0?'\n\nParte automática del cuestionario: '+r2(data.auto_pts)+' de '+r2(data.auto_total)+' puntos.':'')+(data.tardia?'\n\nTu entrega quedó marcada como tardía.':'')+'\n\nLa nota final aparece cuando tu instructor termine de calificar.');
+  }catch(e){exAct.enviando=false;renderExamAp();exTick();alert('No se pudo enviar: '+(e.message||e)+'\n\nTus respuestas siguen en pantalla. Vuelve a intentarlo.')}
+}
+async function verResultadoExamen(id){
+  const ses=ssGet();if(!ses)return;
+  const{data,error}=await sb.rpc('eval_resultado',{p_doc:SES.id,p_ficha:SES.ficha,p_pin:ses.p,p_eval:id});
+  if(error||!data||data.error){alert(MSG_EX[data&&data.error]||'No se pudo cargar el resultado.');return}
+  const f=fichaAct(),ev=(f.misEvals||[]).find(x=>x.id===id)||{titulo:''};
+  const fmt=(q,v)=>{if(v===undefined||v===null||v==='')return '(sin respuesta)';if(q.tipo==='opcion')return q.opciones[Number(v)]!==undefined?q.opciones[Number(v)]:String(v);if(q.tipo==='vf')return v===true?'Verdadero':'Falso';return String(v)};
+  const ok=q=>{const c=q.correcta;if(!c)return '';if(q.tipo==='opcion')return q.opciones[Number(c.indice)]||'';if(q.tipo==='vf')return c.valor?'Verdadero':'Falso';if(q.tipo==='numerica')return String(c.valor)+(c.tolerancia?' (±'+c.tolerancia+')':'');if(q.tipo==='corta')return (c.palabras||[]).join(', ');return ''};
+  exVer=`<div class="row" style="justify-content:space-between"><h2>Mi resultado · ${esc(ev.titulo)}</h2><button class="mini ghost" onclick="cerrarResultadoExamen()">Volver</button></div>
+    <div class="kpis"><div class="kpi"><b>${r2(data.auto_pts)} / ${r2(data.auto_total)}</b><span>cuestionario automático</span></div>
+    ${data.calificado?`<div class="kpi"><b>${esc(data.nota)} / ${esc(r2(data.escala))}</b><span>nota final (${r2(data.pts)} de ${r2(data.total)} puntos)</span></div>`:'<div class="kpi"><b>—</b><span>nota final: pendiente de calificar</span></div>'}</div>
+    ${(data.criterios||[]).length?'<h2 style="font-size:15px;margin:12px 0 6px">Criterios</h2>'+data.criterios.map(c=>`<div class="res"><div class="t"><b>${esc(c.nombre)}</b>${c.comentario?`<div class="muted">${esc(c.comentario)}</div>`:''}</div><span class="pill ${c.pts!==null&&Number(c.pts)>=Number(c.peso)?'ok':'pend'}">${c.pts===null?'—':esc(r2(c.pts))} / ${esc(r2(c.peso))}</span></div>`).join(''):''}
+    ${(data.preguntas||[]).length?'<h2 style="font-size:15px;margin:12px 0 6px">Cuestionario</h2>'+data.preguntas.map((q,k)=>`<div class="res"><div class="t"><b>${k+1}. ${esc(q.enunciado)}</b><div class="muted">Tu respuesta: ${esc(fmt(q,q.tu_respuesta))}</div>${q.correcta?`<div class="muted">Respuesta correcta: ${esc(ok(q))}</div>`:''}${q.comentario?`<div class="muted">Comentario: ${esc(q.comentario)}</div>`:''}</div>
+      <span class="pill ${q.pts===null?'gris':Number(q.pts)>=Number(q.puntos)?'ok':Number(q.pts)>0?'pend':'bad'}">${q.pts===null?'por calificar':esc(r2(q.pts))+' / '+esc(r2(q.puntos))}</span></div>`).join(''):''}`;
+  renderExamAp();
+}
+function cerrarResultadoExamen(){exVer=null;renderExamAp()}
+
+async function refrescarExamAp(){
+  const ses=ssGet(),f=fichaAct();if(!ses||!f)return;
+  const{data,error}=await sb.rpc('aprendiz_evaluaciones',{p_doc:SES.id,p_ficha:SES.ficha,p_pin:ses.p});
+  if(!error&&data&&!data.error){f.misEvals=data.evaluaciones||[];f.ahoraOffset=Date.parse(data.ahora)-Date.now()}
+  renderExamAp();
 }
 
 /* ============ Arranque: recuperar sesión si ya había una ============ */
